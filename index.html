@@ -888,7 +888,7 @@ function parseWorkoutCSV(text){
       const exercise=cols[idx.exercise]?.trim();
       const weight=parseFloat(cols[idx.weight])||0;
       const reps=parseInt(cols[idx.reps])||0;
-      const notes=idx.notes>=0?(cols[idx.notes]?.trim()||')':'';
+      const notes=idx.notes>=0?(cols[idx.notes]?.trim()||''):'';
       const mesoId=idx.meso>=0?(cols[idx.meso]?.trim()||''):'';
       const mesoName=idx.mesoName>=0?(cols[idx.mesoName]?.trim()||mesoId):mesoId;
       if(!date||!exercise)continue;
