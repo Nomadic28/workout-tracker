@@ -335,6 +335,55 @@ function closeDay(ds){
   }
   save();renderAll();
 }
+function jumpToNextDay(ds){
+  const meso=mesoForDate(ds);
+  if(!meso)return;
+  const dates=getMesoDates(meso);
+  const idx=dates.indexOf(ds);
+  if(idx>=0&&idx<dates.length-1){
+    S.currentDate=dates[idx+1];
+    renderAll();
+  }
+}
+function showExHistory(ei){
+  const exName=getW(S.currentDate).exercises[ei]?.name;
+  if(!exName)return;
+  const entries=[];
+  Object.keys(S.workouts).sort().forEach(function(d){
+    const w=S.workouts[d];
+    if(!w||!w.closed)return;
+    const ex=(w.exercises||[]).find(function(e){return e.name===exName;});
+    if(!ex)return;
+    const meso=mesoForDate(d);
+    const wd=meso?getMesoWD(meso,d):null;
+    entries.push({date:d,meso:meso?meso.name:'',wd,sets:ex.sets});
+  });
+  if(!entries.length){
+    showM('<div class="mtt">No history<button class="mcb" onclick="closeM()">x</button></div><div style="font-size:13px;color:var(--txt2);padding:8px 0">No logged sessions found for <b>'+exName+'</b>.</div><button class="mbtn gh" onclick="closeM()">Close</button>');
+    return;
+  }
+  const byMeso={};
+  entries.forEach(function(e){
+    const key=e.meso||'Unknown';
+    if(!byMeso[key])byMeso[key]=[];
+    byMeso[key].push(e);
+  });
+  let h='<div class="mtt">'+exName+'<button class="mcb" onclick="closeM()">x</button></div>';
+  h+='<div style="max-height:60vh;overflow-y:auto;margin:0 -16px;padding:0 16px">';
+  Object.keys(byMeso).reverse().forEach(function(mName){
+    h+='<div style="font-size:11px;font-weight:700;color:var(--txt3);text-transform:uppercase;margin:12px 0 6px">'+mName+'</div>';
+    byMeso[mName].slice().reverse().forEach(function(e){
+      const wdLabel=e.wd?'W'+e.wd.week+' D'+e.wd.day+' - ':'';
+      const setsStr=e.sets.map(function(s){return s.weight+'kg x '+s.reps;}).join(', ');
+      h+='<div style="padding:8px 0;border-bottom:1px solid var(--bg3)">';
+      h+='<div style="font-size:13px;font-weight:600;color:var(--txt1)">'+setsStr+'</div>';
+      h+='<div style="font-size:11px;color:var(--txt3);margin-top:2px">'+wdLabel+fmtS(e.date)+'</div>';
+      h+='</div>';
+    });
+  });
+  h+='</div><button class="mbtn gh" style="margin-top:12px" onclick="closeM()">Close</button>';
+  showM(h);
+}
 function deleteDate(ds){
   delete S.workouts[ds];
   const meso=mesoForDate(ds);
@@ -418,7 +467,10 @@ function renderWorkout(c){
       h+=`<div class="exc${done?' done':''}">
         <div style="display:flex;justify-content:space-between;align-items:start;margin-bottom:2px">
           <div><div class="exn">${ex.name}</div><div class="exs">${ex.muscle}</div></div>
-          ${!isClosed?`<button style="background:transparent;border:none;color:var(--txt3);cursor:pointer;font-size:22px;padding:0 0 0 8px;line-height:1;min-width:44px;min-height:44px;display:flex;align-items:center;justify-content:flex-end" onclick="removeEx(${ex.ei})">×</button>`:''}
+          <div style="display:flex;align-items:center;gap:4px">
+            <button style="background:transparent;border:none;color:var(--txt3);cursor:pointer;padding:0;min-width:44px;min-height:44px;display:flex;align-items:center;justify-content:center" onclick="showExHistory(${ex.ei})"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg></button>
+            ${!isClosed?`<button style="background:transparent;border:none;color:var(--txt3);cursor:pointer;font-size:22px;padding:0;line-height:1;min-width:44px;min-height:44px;display:flex;align-items:center;justify-content:center" onclick="removeEx(${ex.ei})">×</button>`:''}
+          </div>
         </div>
         ${isClosed?(hasNote?`<div class="nshow">📝 ${ex.note}</div>`:''):`<button class="nbtn" onclick="toggleNote(${ex.ei})">
             <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"/></svg>
@@ -471,7 +523,7 @@ function confirmClose(){
   const isLast=dates.length&&S.currentDate===dates[dates.length-1];
   showM(`<div class="mtt">${isLast?'Complete mesocycle?':'Close this day?'}<button class="mcb" onclick="closeM()">×</button></div>
     <div style="font-size:13px;color:var(--txt2);margin-bottom:16px;line-height:1.6">${isLast?'This is the final day. Closing marks the mesocycle as <strong style="color:var(--amber)">complete</strong>.':'All sets locked. Next week pre-loaded with <strong style="color:var(--green)">+1 rep per set</strong> based on what you actually logged.'}</div>
-    <button class="mbtn g" onclick="closeDay('${S.currentDate}');closeM()">${isLast?'Complete mesocycle':'Yes, close day'}</button>
+    <button class="mbtn g" onclick="closeDay('${S.currentDate}');closeM();jumpToNextDay('${S.currentDate}')">${isLast?'Complete mesocycle':'Yes, close day'}</button>
     <button class="mbtn gh" style="margin-top:6px" onclick="closeM()">Cancel</button>`);
 }
 function openAddEx(){
