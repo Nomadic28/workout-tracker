@@ -1,0 +1,753 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Workout Progression Dashboard</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=DM+Mono:wght@400;500&family=Syne:wght@700;800&display=swap');
+
+  :root {
+    --bg: #0a0a0f;
+    --surface: #111118;
+    --card: #16161f;
+    --border: #2a2a38;
+    --accent: #7cfc8e;
+    --accent2: #fc7c8e;
+    --accent3: #7c8efc;
+    --text: #e8e8f0;
+    --muted: #6b6b80;
+    --chest: #fc7c8e;
+    --back: #7c8efc;
+    --shoulders: #fcd07c;
+    --biceps: #7cfcd0;
+    --triceps: #d07cfc;
+    --core: #fc9c7c;
+    --legs: #7ccefc;
+    --glutes: #fc7cce;
+    --forearms: #cefc7c;
+    --calves: #fce07c;
+    --hamstrings: #9cfc7c;
+  }
+
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: 'DM Mono', monospace;
+    min-height: 100vh;
+    overflow-x: hidden;
+  }
+
+  /* Noise grain overlay */
+  body::before {
+    content: '';
+    position: fixed;
+    inset: 0;
+    background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noise'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noise)' opacity='0.04'/%3E%3C/svg%3E");
+    pointer-events: none;
+    z-index: 1000;
+    opacity: 0.4;
+  }
+
+  header {
+    padding: 3rem 2rem 2rem;
+    border-bottom: 1px solid var(--border);
+    display: flex;
+    align-items: flex-end;
+    gap: 2rem;
+    flex-wrap: wrap;
+  }
+
+  .logo-area h1 {
+    font-family: 'Syne', sans-serif;
+    font-size: clamp(2rem, 5vw, 3.5rem);
+    font-weight: 800;
+    line-height: 1;
+    color: var(--accent);
+    letter-spacing: -0.02em;
+  }
+
+  .logo-area p {
+    color: var(--muted);
+    font-size: 0.75rem;
+    margin-top: 0.5rem;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+  }
+
+  .stat-pills {
+    display: flex;
+    gap: 1rem;
+    flex-wrap: wrap;
+    margin-left: auto;
+  }
+
+  .stat-pill {
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 0.6rem 1.2rem;
+    text-align: center;
+  }
+
+  .stat-pill .val {
+    font-family: 'Syne', sans-serif;
+    font-size: 1.4rem;
+    font-weight: 700;
+    color: var(--accent);
+  }
+
+  .stat-pill .lbl {
+    font-size: 0.65rem;
+    color: var(--muted);
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+  }
+
+  nav {
+    display: flex;
+    gap: 0;
+    padding: 0 2rem;
+    border-bottom: 1px solid var(--border);
+    overflow-x: auto;
+  }
+
+  nav button {
+    background: none;
+    border: none;
+    color: var(--muted);
+    font-family: 'DM Mono', monospace;
+    font-size: 0.75rem;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    padding: 1rem 1.5rem;
+    cursor: pointer;
+    border-bottom: 2px solid transparent;
+    transition: all 0.2s;
+    white-space: nowrap;
+  }
+
+  nav button.active {
+    color: var(--accent);
+    border-bottom-color: var(--accent);
+  }
+
+  nav button:hover:not(.active) { color: var(--text); }
+
+  .page { display: none; padding: 2rem; }
+  .page.active { display: block; }
+
+  .grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 1.5rem; }
+  .grid-3 { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 1.5rem; }
+  @media (max-width: 900px) { .grid-2, .grid-3 { grid-template-columns: 1fr; } }
+
+  .card {
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 1.5rem;
+    position: relative;
+    overflow: hidden;
+  }
+
+  .card::after {
+    content: '';
+    position: absolute;
+    top: 0; left: 0; right: 0;
+    height: 1px;
+    background: linear-gradient(90deg, transparent, rgba(124,252,142,0.3), transparent);
+  }
+
+  .card-title {
+    font-size: 0.65rem;
+    color: var(--muted);
+    text-transform: uppercase;
+    letter-spacing: 0.12em;
+    margin-bottom: 1.2rem;
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+  }
+
+  .card-title span { color: var(--accent); }
+
+  .chart-wrap {
+    position: relative;
+    height: 260px;
+  }
+
+  .chart-wrap-tall {
+    position: relative;
+    height: 340px;
+  }
+
+  /* Heatmap */
+  .heatmap {
+    display: grid;
+    grid-template-columns: repeat(53, 1fr);
+    gap: 3px;
+    overflow-x: auto;
+  }
+
+  .hm-cell {
+    width: 100%;
+    aspect-ratio: 1;
+    border-radius: 2px;
+    background: var(--surface);
+    transition: transform 0.1s;
+    cursor: default;
+    position: relative;
+  }
+
+  .hm-cell:hover { transform: scale(1.5); z-index: 10; }
+
+  .hm-cell[data-sets="0"] { background: #1a1a28; }
+  .hm-cell[data-sets="low"] { background: rgba(124,252,142,0.25); }
+  .hm-cell[data-sets="mid"] { background: rgba(124,252,142,0.55); }
+  .hm-cell[data-sets="high"] { background: rgba(124,252,142,0.85); }
+  .hm-cell[data-sets="max"] { background: #7cfc8e; }
+
+  /* Muscle tag pills */
+  .muscle-tags {
+    display: flex;
+    gap: 0.5rem;
+    flex-wrap: wrap;
+    margin-bottom: 1rem;
+  }
+
+  .muscle-tag {
+    font-size: 0.65rem;
+    padding: 0.3rem 0.7rem;
+    border-radius: 4px;
+    cursor: pointer;
+    border: 1px solid transparent;
+    transition: all 0.15s;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    opacity: 0.5;
+  }
+
+  .muscle-tag.on { opacity: 1; }
+
+  /* Exercise selector */
+  select {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    color: var(--text);
+    font-family: 'DM Mono', monospace;
+    font-size: 0.75rem;
+    padding: 0.5rem 0.8rem;
+    border-radius: 6px;
+    cursor: pointer;
+    outline: none;
+    width: 100%;
+    margin-bottom: 1rem;
+  }
+
+  select:focus { border-color: var(--accent); }
+
+  /* Legend */
+  .legend {
+    display: flex;
+    gap: 1rem;
+    flex-wrap: wrap;
+    margin-top: 0.8rem;
+  }
+
+  .legend-item {
+    display: flex;
+    align-items: center;
+    gap: 0.4rem;
+    font-size: 0.65rem;
+    color: var(--muted);
+  }
+
+  .legend-dot {
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+  }
+
+  /* PR badge */
+  .pr-list {
+    display: flex;
+    flex-direction: column;
+    gap: 0.8rem;
+  }
+
+  .pr-row {
+    display: flex;
+    align-items: center;
+    gap: 1rem;
+    padding: 0.7rem;
+    background: var(--surface);
+    border-radius: 8px;
+    border: 1px solid var(--border);
+  }
+
+  .pr-row .ex-name {
+    flex: 1;
+    font-size: 0.75rem;
+    color: var(--text);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  .pr-row .pr-weight {
+    font-family: 'Syne', sans-serif;
+    font-size: 1.1rem;
+    font-weight: 700;
+    color: var(--accent);
+    white-space: nowrap;
+  }
+
+  .pr-row .pr-date {
+    font-size: 0.6rem;
+    color: var(--muted);
+    white-space: nowrap;
+  }
+
+  .span-full { grid-column: 1 / -1; }
+
+  .deload-notice {
+    background: linear-gradient(135deg, rgba(252,124,142,0.1), rgba(124,142,252,0.1));
+    border: 1px solid rgba(252,124,142,0.3);
+    border-radius: 8px;
+    padding: 1rem 1.5rem;
+    margin-bottom: 1.5rem;
+    font-size: 0.75rem;
+    color: var(--muted);
+  }
+
+  .deload-notice strong { color: var(--accent2); }
+</style>
+</head>
+<body>
+
+<header>
+  <div class="logo-area">
+    <h1>GAINS.LOG</h1>
+    <p>Progression Dashboard — Jan 2025 → May 2026</p>
+  </div>
+  <div class="stat-pills">
+    <div class="stat-pill"><div class="val" id="totalSets">—</div><div class="lbl">Total Sets</div></div>
+    <div class="stat-pill"><div class="val" id="totalDays">—</div><div class="lbl">Training Days</div></div>
+    <div class="stat-pill"><div class="val" id="totalEx">—</div><div class="lbl">Exercises</div></div>
+    <div class="stat-pill"><div class="val" id="totalMeso">—</div><div class="lbl">Mesocycles</div></div>
+  </div>
+</header>
+
+<nav>
+  <button class="active" onclick="showPage('overview')">Overview</button>
+  <button onclick="showPage('volume')">Volume</button>
+  <button onclick="showPage('progression')">Progression</button>
+  <button onclick="showPage('heatmap')">Consistency</button>
+</nav>
+
+<!-- OVERVIEW -->
+<div class="page active" id="page-overview">
+  <div class="deload-notice">
+    <strong>Week 5 = Deload</strong> — weights dropped ~30–40% across all exercises on 17–21 May 2026. Deload data shown but excluded from PR tracking.
+  </div>
+  <div class="grid-2" style="margin-bottom:1.5rem">
+    <div class="card">
+      <div class="card-title">Sets per Muscle Group — <span>M11 (Current Meso)</span></div>
+      <div class="chart-wrap"><canvas id="chartMuscleSets"></canvas></div>
+    </div>
+    <div class="card">
+      <div class="card-title">Volume per Day — <span>M11 Weekly Trend</span></div>
+      <div class="chart-wrap"><canvas id="chartDailyVol"></canvas></div>
+    </div>
+  </div>
+  <div class="grid-3">
+    <div class="card span-full">
+      <div class="card-title">Top Exercise PRs — <span>Peak Weight Lifted (excl. deload)</span></div>
+      <div class="pr-list" id="prList"></div>
+    </div>
+  </div>
+</div>
+
+<!-- VOLUME -->
+<div class="page" id="page-volume">
+  <div class="card" style="margin-bottom:1.5rem">
+    <div class="card-title">Muscle Group Volume — <span>Toggle muscles</span></div>
+    <div class="muscle-tags" id="muscleTags"></div>
+    <div class="chart-wrap-tall"><canvas id="chartVolMuscle"></canvas></div>
+  </div>
+  <div class="card">
+    <div class="card-title">Sets per Session — <span>Full History</span></div>
+    <div class="chart-wrap-tall"><canvas id="chartSetsTimeline"></canvas></div>
+  </div>
+</div>
+
+<!-- PROGRESSION -->
+<div class="page" id="page-progression">
+  <div class="card" style="margin-bottom:1.5rem">
+    <div class="card-title">Weight Progression — <span>Select exercise</span></div>
+    <select id="exSelect"></select>
+    <div class="chart-wrap-tall"><canvas id="chartExProgress"></canvas></div>
+  </div>
+  <div class="grid-2">
+    <div class="card">
+      <div class="card-title">Rep Progression — <span>Selected exercise avg reps/session</span></div>
+      <div class="chart-wrap"><canvas id="chartRepProgress"></canvas></div>
+    </div>
+    <div class="card">
+      <div class="card-title">Volume (kg) Trend — <span>Selected exercise</span></div>
+      <div class="chart-wrap"><canvas id="chartVolProgress"></canvas></div>
+    </div>
+  </div>
+</div>
+
+<!-- HEATMAP / CONSISTENCY -->
+<div class="page" id="page-heatmap">
+  <div class="card" style="margin-bottom:1.5rem">
+    <div class="card-title">Training Consistency — <span>Jan 2025 → May 2026</span></div>
+    <div class="heatmap" id="heatmapGrid"></div>
+    <div class="legend" style="margin-top:1rem">
+      <div class="legend-item"><div class="legend-dot" style="background:#1a1a28"></div> Rest</div>
+      <div class="legend-item"><div class="legend-dot" style="background:rgba(124,252,142,0.25)"></div> Light (≤5 sets)</div>
+      <div class="legend-item"><div class="legend-dot" style="background:rgba(124,252,142,0.55)"></div> Moderate</div>
+      <div class="legend-item"><div class="legend-dot" style="background:rgba(124,252,142,0.85)"></div> Heavy</div>
+      <div class="legend-item"><div class="legend-dot" style="background:#7cfc8e"></div> Peak (20+ sets)</div>
+    </div>
+  </div>
+  <div class="grid-2">
+    <div class="card">
+      <div class="card-title">Sessions per Month</div>
+      <div class="chart-wrap"><canvas id="chartMonthly"></canvas></div>
+    </div>
+    <div class="card">
+      <div class="card-title">Day of Week Frequency</div>
+      <div class="chart-wrap"><canvas id="chartDOW"></canvas></div>
+    </div>
+  </div>
+</div>
+
+<script>
+// ── DATA ──────────────────────────────────────────────────────────────────────
+const RAW = {"rows": [{"date": "2025-01-20", "meso_id": "Legacy", "meso_name": "M1\u2013M10", "week": "", "muscle": "Chest", "exercise": "Flat Barbell Press", "weight": 40.0, "reps": 8, "volume": 320.0}, {"date": "2025-01-20", "meso_id": "Legacy", "meso_name": "M1\u2013M10", "week": "", "muscle": "Chest", "exercise": "Flat Barbell Press", "weight": 40.0, "reps": 8, "volume": 320.0}, {"date": "2025-01-20", "meso_id": "Legacy", "meso_name": "M1\u2013M10", "week": "", "muscle": "Chest", "exercise": "Incline Chest Press", "weight": 30.0, "reps": 8, "volume": 240.0}, {"date": "2025-01-20", "meso_id": "Legacy", "meso_name": "M1\u2013M10", "week": "", "muscle": "Chest", "exercise": "Incline Chest Press", "weight": 30.0, "reps": 8, "volume": 240.0}, {"date": "2025-01-20", "meso_id": "Legacy", "meso_name": "M1\u2013M10", "week": "", "muscle": "Chest", "exercise": "Decline Chest Press", "weight": 40.0, "reps": 8, "volume": 320.0}, {"date": "2025-01-20", "meso_id": "Legacy", "meso_name": "M1\u2013M10", "week": "", "muscle": "Chest", "exercise": "Decline Chest Press", "weight": 40.0, "reps": 8, "volume": 320.0}, {"date": "2025-01-20", "meso_id": "Legacy", "meso_name": "M1\u2013M10", "week": "", "muscle": "Triceps", "exercise": "Barbell Skull Crusher", "weight": 10.0, "reps": 8, "volume": 80.0}, {"date": "2025-01-20", "meso_id": "Legacy", "meso_name": "M1\u2013M10", "week": "", "muscle": "Triceps", "exercise": "Barbell Skull Crusher", "weight": 10.0, "reps": 8, "volume": 80.0}, {"date": "2025-01-20", "meso_id": "Legacy", "meso_name": "M1\u2013M10", "week": "", "muscle": "Shoulders", "exercise": "Dumbbell Lateral Raise", "weight": 2.0, "reps": 8, "volume": 16.0}, {"date": "2025-01-20", "meso_id": "Legacy", "meso_name": "M1\u2013M10", "week": "", "muscle": "Shoulders", "exercise": "Dumbbell Lateral Raise", "weight": 2.0, "reps": 11, "volume": 22.0}, {"date": "2025-01-20", "meso_id": "Legacy", "meso_name": "M1\u2013M10", "week": "", "muscle": "Shoulders", "exercise": "Dumbbell Lateral Raise", "weight": 2.0, "reps": 11, "volume": 22.0}, {"date": "2025-01-20", "meso_id": "Legacy", "meso_name": "M1\u2013M10", "week": "", "muscle": "Core", "exercise": "Hanging Leg Raise", "weight": 97.5, "reps": 5, "volume": 487.5}, {"date": "2025-01-20", "meso_id": "Legacy", "meso_name": "M1\u2013M10", "week": "", "muscle": "Core", "exercise": "Hanging Leg Raise", "weight": 97.5, "reps": 5, "volume": 487.5}, {"date": "2025-01-27", "meso_id": "Legacy", "meso_name": "M1\u2013M10", "week": "", "muscle": "Chest", "exercise": "Flat Barbell Press", "weight": 42.5, "reps": 8, "volume": 340.0}, {"date": "2025-01-27", "meso_id": "Legacy", "meso_name": "M1\u2013M10", "week": "", "muscle": "Chest", "exercise": "Flat Barbell Press", "weight": 42.5, "reps": 8, "volume": 340.0}, {"date": "2025-01-27", "meso_id": "Legacy", "meso_name": "M1\u2013M10", "week": "", "muscle": "Chest", "exercise": "Incline Chest Press", "weight": 50.0, "reps": 5, "volume": 250.0}, {"date": "2025-01-27", "meso_id": "Legacy", "meso_name": "M1\u2013M10", "week": "", "muscle": "Chest", "exercise": "Incline Chest Press", "weight": 50.0, "reps": 5, "volume": 250.0}, {"date": "2025-01-27", "meso_id": "Legacy", "meso_name": "M1\u2013M10", "week": "", "muscle": "Triceps", "exercise": "Barbell Skull Crusher", "weight": 14.0, "reps": 7, "volume": 98.0}, {"date": "2025-01-27", "meso_id": "Legacy", "meso_name": "M1\u2013M10", "week": "", "muscle": "Triceps", "exercise": "Barbell Skull Crusher", "weight": 14.0, "reps": 7, "volume": 98.0}, {"date": "2025-01-27", "meso_id": "Legacy", "meso_name": "M1\u2013M10", "week": "", "muscle": "Shoulders", "exercise": "Freemotion Y raises Paused", "weight": 16.0, "reps": 7, "volume": 112.0}, {"date": "2025-01-27", "meso_id": "Legacy", "meso_name": "M1\u2013M10", "week": "", "muscle": "Shoulders", "exercise": "Freemotion Y raises Paused", "weight": 16.0, "reps": 7, "volume": 112.0}, {"date": "2025-01-27", "meso_id": "Legacy", "meso_name": "M1\u2013M10", "week": "", "muscle": "Shoulders", "exercise": "Freemotion Y raises Paused", "weight": 16.0, "reps": 7, "volume": 112.0}, {"date": "2025-01-27", "meso_id": "Legacy", "meso_name": "M1\u2013M10", "week": "", "muscle": "Core", "exercise": "Hanging Leg Raise", "weight": 95.6, "reps": 9, "volume": 860.4}, {"date": "2025-01-27", "meso_id": "Legacy", "meso_name": "M1\u2013M10", "week": "", "muscle": "Core", "exercise": "Hanging Leg Raise", "weight": 95.6, "reps": 9, "volume": 860.4}, {"date": "2025-02-03", "meso_id": "Legacy", "meso_name": "M1\u2013M10", "week": "", "muscle": "Chest", "exercise": "Flat Barbell Press", "weight": 45.0, "reps": 8, "volume": 360.0}, {"date": "2025-02-03", "meso_id": "Legacy", "meso_name": "M1\u2013M10", "week": "", "muscle": "Chest", "exercise": "Flat Barbell Press", "weight": 45.0, "reps": 8, "volume": 360.0}, {"date": "2025-02-03", "meso_id": "Legacy", "meso_name": "M1\u2013M10", "week": "", "muscle": "Chest", "exercise": "Incline Chest Press", "weight": 50.0, "reps": 6, "volume": 300.0}, {"date": "2025-02-03", "meso_id": "Legacy", "meso_name": "M1\u2013M10", "week": "", "muscle": "Chest", "exercise": "Incline Chest Press", "weight": 50.0, "reps": 6, "volume": 300.0}, {"date": "2025-02-03", "meso_id": "Legacy", "meso_name": "M1\u2013M10", "week": "", "muscle": "Triceps", "exercise": "Barbell Skull Crusher", "weight": 15.0, "reps": 5, "volume": 75.0}, {"date": "2025-02-03", "meso_id": "Legacy", "meso_name": "M1\u2013M10", "week": "", "muscle": "Triceps", "exercise": "Barbell Skull Crusher", "weight": 15.0, "reps": 5, "volume": 75.0}, {"date": "2025-02-03", "meso_id": "Legacy", "meso_name": "M1\u2013M10", "week": "", "muscle": "Shoulders", "exercise": "Freemotion Y raises Paused", "weight": 16.0, "reps": 8, "volume": 128.0}, {"date": "2025-02-03", "meso_id": "Legacy", "meso_name": "M1\u2013M10", "week": "", "muscle": "Shoulders", "exercise": "Freemotion Y raises Paused", "weight": 16.0, "reps": 8, "volume": 128.0}, {"date": "2025-02-03", "meso_id": "Legacy", "meso_name": "M1\u2013M10", "week": "", "muscle": "Shoulders", "exercise": "Freemotion Y raises Paused", "weight": 16.0, "reps": 8, "volume": 128.0}, {"date": "2025-02-03", "meso_id": "Legacy", "meso_name": "M1\u2013M10", "week": "", "muscle": "Core", "exercise": "Hanging Leg Raise", "weight": 95.6, "reps": 10, "volume": 956.0}, {"date": "2025-02-03", "meso_id": "Legacy", "meso_name": "M1\u2013M10", "week": "", "muscle": "Core", "exercise": "Hanging Leg Raise", "weight": 95.6, "reps": 10, "volume": 956.0}, {"date": "2025-02-10", "meso_id": "Legacy", "meso_name": "M1\u2013M10", "week": "", "muscle": "Chest", "exercise": "Flat Barbell Press", "weight": 47.5, "reps": 8, "volume": 380.0}, {"date": "2025-02-10", "meso_id": "Legacy", "meso_name": "M1\u2013M10", "week": "", "muscle": "Chest", "exercise": "Flat Barbell Press", "weight": 47.5, "reps": 8, "volume": 380.0}, {"date": "2025-02-10", "meso_id": "Legacy", "meso_name": "M1\u2013M10", "week": "", "muscle": "Chest", "exercise": "Incline Chest Press", "weight": 42.5, "reps": 7, "volume": 297.5}, {"date": "2025-02-10", "meso_id": "Legacy", "meso_name": "M1\u2013M10", "week": "", "muscle": "Chest", "exercise": "Incline Chest Press", "weight": 42.5, "reps": 7, "volume": 297.5}, {"date": "2025-02-10", "meso_id": "Legacy", "meso_name": "M1\u2013M10", "week": "", "muscle": "Triceps", "exercise": "Barbell Skull Crusher", "weight": 15.0, "reps": 6, "volume": 90.0}, {"date": "2025-02-10", "meso_id": "Legacy", "meso_name": "M1\u2013M10", "week": "", "muscle": "Triceps", "exercise": "Barbell Skull Crusher", "weight": 15.0, "reps": 6, "volume": 90.0}, {"date": "2025-02-10", "meso_id": "Legacy", "meso_name": "M1\u2013M10", "week": "", "muscle": "Shoulders", "exercise": "Freemotion Y raises Paused", "weight": 16.0, "reps": 9, "volume": 144.0}, {"date": "2025-02-10", "meso_id": "Legacy", "meso_name": "M1\u2013M10", "week": "", "muscle": "Shoulders", "exercise": "Freemotion Y raises Paused", "weight": 16.0, "reps": 9, "volume": 144.0}, {"date": "2025-02-10", "meso_id": "Legacy", "meso_name": "M1\u2013M10", "week": "", "muscle": "Shoulders", "exercise": "Freemotion Y raises Paused", "weight": 16.0, "reps": 9, "volume": 144.0}, {"date": "2025-02-10", "meso_id": "Legacy", "meso_name": "M1\u2013M10", "week": "", "muscle": "Core", "exercise": "Hanging Leg Raise", "weight": 95.6, "reps": 11, "volume": 1051.6}, {"date": "2025-02-10", "meso_id": "Legacy", "meso_name": "M1\u2013M10", "week": "", "muscle": "Core", "exercise": "Hanging Leg Raise", "weight": 95.6, "reps": 11, "volume": 1051.6}, {"date": "2025-02-24", "meso_id": "Legacy", "meso_name": "M1\u2013M10", "week": "", "muscle": "Chest", "exercise": "Flat Barbell Press", "weight": 47.5, "reps": 8, "volume": 380.0}, {"date": "2025-02-24", "meso_id": "Legacy", "meso_name": "M1\u2013M10", "week": "", "muscle": "Chest", "exercise": "Flat Barbell Press", "weight": 47.5, "reps": 6, "volume": 285.0}, {"date": "2025-03-03", "meso_id": "Legacy", "meso_name": "M1\u2013M10", "week": "", "muscle": "Chest", "exercise": "Flat Barbell Press", "weight": 50.0, "reps": 5, "volume": 250.0}, {"date": "2025-03-03", "meso_id": "Legacy", "meso_name": "M1\u2013M10", "week": "", "muscle": "Chest", "exercise": "Flat Barbell Press", "weight": 50.0, "reps": 5, "volume": 250.0}, {"date": "2025-03-10", "meso_id": "Legacy", "meso_name": "M1\u2013M10", "week": "", "muscle": "Chest", "exercise": "Flat Barbell Press", "weight": 50.0, "reps": 6, "volume": 300.0}, {"date": "2025-03-10", "meso_id": "Legacy", "meso_name": "M1\u2013M10", "week": "", "muscle": "Chest", "exercise": "Flat Barbell Press", "weight": 50.0, "reps": 6, "volume": 300.0}, {"date": "2025-03-17", "meso_id": "Legacy", "meso_name": "M1\u2013M10", "week": "", "muscle": "Chest", "exercise": "Flat Barbell Press", "weight": 52.5, "reps": 5, "volume": 262.5}, {"date": "2025-03-17", "meso_id": "Legacy", "meso_name": "M1\u2013M10", "week": "", "muscle": "Chest", "exercise": "Flat Barbell Press", "weight": 52.5, "reps": 5, "volume": 262.5}, {"date": "2025-06-11", "meso_id": "Legacy", "meso_name": "M1\u2013M10", "week": "", "muscle": "Hamstrings", "exercise": "Back Raise", "weight": 93.0, "reps": 9, "volume": 837.0}, {"date": "2025-06-11", "meso_id": "Legacy", "meso_name": "M1\u2013M10", "week": "", "muscle": "Hamstrings", "exercise": "Back Raise", "weight": 93.0, "reps": 9, "volume": 837.0}, {"date": "2025-06-18", "meso_id": "Legacy", "meso_name": "M1\u2013M10", "week": "", "muscle": "Hamstrings", "exercise": "Back Raise", "weight": 93.0, "reps": 10, "volume": 930.0}, {"date": "2025-06-18", "meso_id": "Legacy", "meso_name": "M1\u2013M10", "week": "", "muscle": "Hamstrings", "exercise": "Back Raise", "weight": 93.0, "reps": 10, "volume": 930.0}, {"date": "2025-06-25", "meso_id": "Legacy", "meso_name": "M1\u2013M10", "week": "", "muscle": "Hamstrings", "exercise": "Back Raise", "weight": 93.0, "reps": 11, "volume": 1023.0}, {"date": "2025-06-25", "meso_id": "Legacy", "meso_name": "M1\u2013M10", "week": "", "muscle": "Hamstrings", "exercise": "Back Raise", "weight": 93.0, "reps": 11, "volume": 1023.0}, {"date": "2025-07-02", "meso_id": "Legacy", "meso_name": "M1\u2013M10", "week": "", "muscle": "Hamstrings", "exercise": "Back Raise", "weight": 93.0, "reps": 12, "volume": 1116.0}, {"date": "2025-07-02", "meso_id": "Legacy", "meso_name": "M1\u2013M10", "week": "", "muscle": "Hamstrings", "exercise": "Back Raise", "weight": 93.0, "reps": 12, "volume": 1116.0}, {"date": "2025-10-08", "meso_id": "Legacy", "meso_name": "M1\u2013M10", "week": "", "muscle": "Hamstrings", "exercise": "Back Raise", "weight": 90.0, "reps": 8, "volume": 720.0}, {"date": "2025-10-08", "meso_id": "Legacy", "meso_name": "M1\u2013M10", "week": "", "muscle": "Hamstrings", "exercise": "Back Raise", "weight": 90.0, "reps": 8, "volume": 720.0}, {"date": "2025-10-15", "meso_id": "Legacy", "meso_name": "M1\u2013M10", "week": "", "muscle": "Hamstrings", "exercise": "Back Raise", "weight": 90.0, "reps": 9, "volume": 810.0}, {"date": "2025-10-15", "meso_id": "Legacy", "meso_name": "M1\u2013M10", "week": "", "muscle": "Hamstrings", "exercise": "Back Raise", "weight": 90.0, "reps": 9, "volume": 810.0}, {"date": "2025-10-22", "meso_id": "Legacy", "meso_name": "M1\u2013M10", "week": "", "muscle": "Hamstrings", "exercise": "Back Raise", "weight": 90.0, "reps": 10, "volume": 900.0}, {"date": "2025-10-22", "meso_id": "Legacy", "meso_name": "M1\u2013M10", "week": "", "muscle": "Hamstrings", "exercise": "Back Raise", "weight": 90.0, "reps": 10, "volume": 900.0}, {"date": "2025-10-29", "meso_id": "Legacy", "meso_name": "M1\u2013M10", "week": "", "muscle": "Hamstrings", "exercise": "Back Raise", "weight": 90.0, "reps": 11, "volume": 990.0}, {"date": "2025-10-29", "meso_id": "Legacy", "meso_name": "M1\u2013M10", "week": "", "muscle": "Hamstrings", "exercise": "Back Raise", "weight": 90.0, "reps": 11, "volume": 990.0}, {"date": "2025-11-12", "meso_id": "Legacy", "meso_name": "M1\u2013M10", "week": "", "muscle": "Hamstrings", "exercise": "Back Raise", "weight": 92.0, "reps": 8, "volume": 736.0}, {"date": "2025-11-12", "meso_id": "Legacy", "meso_name": "M1\u2013M10", "week": "", "muscle": "Hamstrings", "exercise": "Back Raise", "weight": 92.0, "reps": 8, "volume": 736.0}, {"date": "2025-11-19", "meso_id": "Legacy", "meso_name": "M1\u2013M10", "week": "", "muscle": "Hamstrings", "exercise": "Back Raise", "weight": 92.0, "reps": 9, "volume": 828.0}, {"date": "2025-11-19", "meso_id": "Legacy", "meso_name": "M1\u2013M10", "week": "", "muscle": "Hamstrings", "exercise": "Back Raise", "weight": 92.0, "reps": 9, "volume": 828.0}, {"date": "2025-11-26", "meso_id": "Legacy", "meso_name": "M1\u2013M10", "week": "", "muscle": "Hamstrings", "exercise": "Back Raise", "weight": 92.0, "reps": 10, "volume": 920.0}, {"date": "2025-11-26", "meso_id": "Legacy", "meso_name": "M1\u2013M10", "week": "", "muscle": "Hamstrings", "exercise": "Back Raise", "weight": 92.0, "reps": 10, "volume": 920.0}, {"date": "2025-12-03", "meso_id": "Legacy", "meso_name": "M1\u2013M10", "week": "", "muscle": "Hamstrings", "exercise": "Back Raise", "weight": 92.0, "reps": 11, "volume": 1012.0}, {"date": "2025-12-03", "meso_id": "Legacy", "meso_name": "M1\u2013M10", "week": "", "muscle": "Hamstrings", "exercise": "Back Raise", "weight": 92.0, "reps": 11, "volume": 1012.0}, {"date": "2025-12-10", "meso_id": "Legacy", "meso_name": "M1\u2013M10", "week": "", "muscle": "Hamstrings", "exercise": "Back Raise", "weight": 92.0, "reps": 12, "volume": 1104.0}, {"date": "2025-12-10", "meso_id": "Legacy", "meso_name": "M1\u2013M10", "week": "", "muscle": "Hamstrings", "exercise": "Back Raise", "weight": 92.0, "reps": 12, "volume": 1104.0}, {"date": "2025-12-17", "meso_id": "Legacy", "meso_name": "M1\u2013M10", "week": "", "muscle": "Hamstrings", "exercise": "Back Raise", "weight": 92.0, "reps": 13, "volume": 1196.0}, {"date": "2025-12-17", "meso_id": "Legacy", "meso_name": "M1\u2013M10", "week": "", "muscle": "Hamstrings", "exercise": "Back Raise", "weight": 92.0, "reps": 13, "volume": 1196.0}, {"date": "2026-01-07", "meso_id": "Legacy", "meso_name": "M1\u2013M10", "week": "", "muscle": "Hamstrings", "exercise": "Back Raise", "weight": 93.0, "reps": 7, "volume": 651.0}, {"date": "2026-01-07", "meso_id": "Legacy", "meso_name": "M1\u2013M10", "week": "", "muscle": "Hamstrings", "exercise": "Back Raise", "weight": 93.0, "reps": 7, "volume": 651.0}, {"date": "2026-01-14", "meso_id": "Legacy", "meso_name": "M1\u2013M10", "week": "", "muscle": "Hamstrings", "exercise": "Back Raise", "weight": 93.0, "reps": 8, "volume": 744.0}, {"date": "2026-01-14", "meso_id": "Legacy", "meso_name": "M1\u2013M10", "week": "", "muscle": "Hamstrings", "exercise": "Back Raise", "weight": 93.0, "reps": 8, "volume": 744.0}, {"date": "2026-01-21", "meso_id": "Legacy", "meso_name": "M1\u2013M10", "week": "", "muscle": "Hamstrings", "exercise": "Back Raise", "weight": 93.0, "reps": 9, "volume": 837.0}, {"date": "2026-01-21", "meso_id": "Legacy", "meso_name": "M1\u2013M10", "week": "", "muscle": "Hamstrings", "exercise": "Back Raise", "weight": 93.0, "reps": 9, "volume": 837.0}, {"date": "2026-01-28", "meso_id": "Legacy", "meso_name": "M1\u2013M10", "week": "", "muscle": "Hamstrings", "exercise": "Back Raise", "weight": 93.0, "reps": 10, "volume": 930.0}, {"date": "2026-01-28", "meso_id": "Legacy", "meso_name": "M1\u2013M10", "week": "", "muscle": "Hamstrings", "exercise": "Back Raise", "weight": 93.0, "reps": 10, "volume": 930.0}, {"date": "2026-04-19", "meso_id": "M11", "meso_name": "M11 \u2013 Apr/May 2026", "week": "1", "muscle": "Chest", "exercise": "Seated Chest Press", "weight": 45.0, "reps": 5, "volume": 225.0}, {"date": "2026-04-19", "meso_id": "M11", "meso_name": "M11 \u2013 Apr/May 2026", "week": "1", "muscle": "Chest", "exercise": "Seated Chest Press", "weight": 45.0, "reps": 5, "volume": 225.0}, {"date": "2026-04-19", "meso_id": "M11", "meso_name": "M11 \u2013 Apr/May 2026", "week": "1", "muscle": "Chest", "exercise": "Seated Chest Press", "weight": 45.0, "reps": 5, "volume": 225.0}, {"date": "2026-04-19", "meso_id": "M11", "meso_name": "M11 \u2013 Apr/May 2026", "week": "1", "muscle": "Chest", "exercise": "Seated Flys", "weight": 3.75, "reps": 5, "volume": 18.8}, {"date": "2026-04-19", "meso_id": "M11", "meso_name": "M11 \u2013 Apr/May 2026", "week": "1", "muscle": "Chest", "exercise": "Seated Flys", "weight": 3.75, "reps": 5, "volume": 18.8}, {"date": "2026-04-19", "meso_id": "M11", "meso_name": "M11 \u2013 Apr/May 2026", "week": "1", "muscle": "Chest", "exercise": "Seated Flys", "weight": 3.75, "reps": 5, "volume": 18.8}, {"date": "2026-04-19", "meso_id": "M11", "meso_name": "M11 \u2013 Apr/May 2026", "week": "1", "muscle": "Chest", "exercise": "Decline Chest Press", "weight": 75.0, "reps": 5, "volume": 375.0}, {"date": "2026-04-19", "meso_id": "M11", "meso_name": "M11 \u2013 Apr/May 2026", "week": "1", "muscle": "Chest", "exercise": "Decline Chest Press", "weight": 75.0, "reps": 5, "volume": 375.0}, {"date": "2026-04-19", "meso_id": "M11", "meso_name": "M11 \u2013 Apr/May 2026", "week": "1", "muscle": "Chest", "exercise": "Decline Chest Press", "weight": 75.0, "reps": 5, "volume": 375.0}, {"date": "2026-04-19", "meso_id": "M11", "meso_name": "M11 \u2013 Apr/May 2026", "week": "1", "muscle": "Forearms", "exercise": "Bent Over Grip Strength", "weight": 37.5, "reps": 5, "volume": 187.5}, {"date": "2026-04-19", "meso_id": "M11", "meso_name": "M11 \u2013 Apr/May 2026", "week": "1", "muscle": "Forearms", "exercise": "Bent Over Grip Strength", "weight": 37.5, "reps": 5, "volume": 187.5}, {"date": "2026-04-19", "meso_id": "M11", "meso_name": "M11 \u2013 Apr/May 2026", "week": "1", "muscle": "Forearms", "exercise": "Bent Over Grip Strength", "weight": 37.5, "reps": 5, "volume": 187.5}, {"date": "2026-04-19", "meso_id": "M11", "meso_name": "M11 \u2013 Apr/May 2026", "week": "1", "muscle": "Glutes", "exercise": "Reverse Glute Pendulum Machine", "weight": 60.0, "reps": 6, "volume": 360.0}, {"date": "2026-04-19", "meso_id": "M11", "meso_name": "M11 \u2013 Apr/May 2026", "week": "1", "muscle": "Glutes", "exercise": "Reverse Glute Pendulum Machine", "weight": 60.0, "reps": 6, "volume": 360.0}, {"date": "2026-04-19", "meso_id": "M11", "meso_name": "M11 \u2013 Apr/May 2026", "week": "1", "muscle": "Core", "exercise": "Cable Crunch", "weight": 60.0, "reps": 6, "volume": 360.0}, {"date": "2026-04-19", "meso_id": "M11", "meso_name": "M11 \u2013 Apr/May 2026", "week": "1", "muscle": "Core", "exercise": "Cable Crunch", "weight": 60.0, "reps": 6, "volume": 360.0}, {"date": "2026-04-19", "meso_id": "M11", "meso_name": "M11 \u2013 Apr/May 2026", "week": "1", "muscle": "Calves", "exercise": "Smith Machine Calves", "weight": 47.5, "reps": 6, "volume": 285.0}, {"date": "2026-04-19", "meso_id": "M11", "meso_name": "M11 \u2013 Apr/May 2026", "week": "1", "muscle": "Calves", "exercise": "Smith Machine Calves", "weight": 47.5, "reps": 6, "volume": 285.0}, {"date": "2026-04-19", "meso_id": "M11", "meso_name": "M11 \u2013 Apr/May 2026", "week": "1", "muscle": "Shoulders", "exercise": "Machine Lateral Raise", "weight": 5.0, "reps": 7, "volume": 35.0}, {"date": "2026-04-19", "meso_id": "M11", "meso_name": "M11 \u2013 Apr/May 2026", "week": "1", "muscle": "Shoulders", "exercise": "Machine Lateral Raise", "weight": 5.0, "reps": 7, "volume": 35.0}, {"date": "2026-04-19", "meso_id": "M11", "meso_name": "M11 \u2013 Apr/May 2026", "week": "1", "muscle": "Shoulders", "exercise": "Machine Lateral Raise", "weight": 5.0, "reps": 7, "volume": 35.0}, {"date": "2026-04-20", "meso_id": "M11", "meso_name": "M11 \u2013 Apr/May 2026", "week": "1", "muscle": "Biceps", "exercise": "EZ Bar Curl (Narrow Grip)", "weight": 20.0, "reps": 5, "volume": 100.0}, {"date": "2026-04-20", "meso_id": "M11", "meso_name": "M11 \u2013 Apr/May 2026", "week": "1", "muscle": "Biceps", "exercise": "EZ Bar Curl (Narrow Grip)", "weight": 20.0, "reps": 5, "volume": 100.0}, {"date": "2026-04-20", "meso_id": "M11", "meso_name": "M11 \u2013 Apr/May 2026", "week": "1", "muscle": "Biceps", "exercise": "EZ Bar Curl (Narrow Grip)", "weight": 20.0, "reps": 5, "volume": 100.0}, {"date": "2026-04-20", "meso_id": "M11", "meso_name": "M11 \u2013 Apr/May 2026", "week": "1", "muscle": "Biceps", "exercise": "Lying Biceps Dumbbell Curl", "weight": 7.5, "reps": 7, "volume": 52.5}, {"date": "2026-04-20", "meso_id": "M11", "meso_name": "M11 \u2013 Apr/May 2026", "week": "1", "muscle": "Biceps", "exercise": "Lying Biceps Dumbbell Curl", "weight": 7.5, "reps": 7, "volume": 52.5}, {"date": "2026-04-20", "meso_id": "M11", "meso_name": "M11 \u2013 Apr/May 2026", "week": "1", "muscle": "Biceps", "exercise": "Lying Biceps Dumbbell Curl", "weight": 7.5, "reps": 7, "volume": 52.5}, {"date": "2026-04-20", "meso_id": "M11", "meso_name": "M11 \u2013 Apr/May 2026", "week": "1", "muscle": "Biceps", "exercise": "Machine Preacher Curl", "weight": 22.5, "reps": 5, "volume": 112.5}, {"date": "2026-04-20", "meso_id": "M11", "meso_name": "M11 \u2013 Apr/May 2026", "week": "1", "muscle": "Biceps", "exercise": "Machine Preacher Curl", "weight": 22.5, "reps": 5, "volume": 112.5}, {"date": "2026-04-20", "meso_id": "M11", "meso_name": "M11 \u2013 Apr/May 2026", "week": "1", "muscle": "Biceps", "exercise": "Machine Preacher Curl", "weight": 22.5, "reps": 5, "volume": 112.5}, {"date": "2026-04-20", "meso_id": "M11", "meso_name": "M11 \u2013 Apr/May 2026", "week": "1", "muscle": "Shoulders", "exercise": "Cable Rope Facepull", "weight": 20.5, "reps": 5, "volume": 102.5}, {"date": "2026-04-20", "meso_id": "M11", "meso_name": "M11 \u2013 Apr/May 2026", "week": "1", "muscle": "Shoulders", "exercise": "Cable Rope Facepull", "weight": 20.5, "reps": 5, "volume": 102.5}, {"date": "2026-04-20", "meso_id": "M11", "meso_name": "M11 \u2013 Apr/May 2026", "week": "1", "muscle": "Shoulders", "exercise": "Cable Rope Facepull", "weight": 20.5, "reps": 5, "volume": 102.5}, {"date": "2026-04-20", "meso_id": "M11", "meso_name": "M11 \u2013 Apr/May 2026", "week": "1", "muscle": "Quads", "exercise": "Leg Press", "weight": 55.0, "reps": 5, "volume": 275.0}, {"date": "2026-04-20", "meso_id": "M11", "meso_name": "M11 \u2013 Apr/May 2026", "week": "1", "muscle": "Quads", "exercise": "Leg Press", "weight": 55.0, "reps": 5, "volume": 275.0}, {"date": "2026-04-20", "meso_id": "M11", "meso_name": "M11 \u2013 Apr/May 2026", "week": "1", "muscle": "Core", "exercise": "Crunch Machine Upstairs", "weight": 22.5, "reps": 6, "volume": 135.0}, {"date": "2026-04-20", "meso_id": "M11", "meso_name": "M11 \u2013 Apr/May 2026", "week": "1", "muscle": "Core", "exercise": "Crunch Machine Upstairs", "weight": 22.5, "reps": 6, "volume": 135.0}, {"date": "2026-04-20", "meso_id": "M11", "meso_name": "M11 \u2013 Apr/May 2026", "week": "1", "muscle": "Quads", "exercise": "Hip Adduction", "weight": 30.0, "reps": 6, "volume": 180.0}, {"date": "2026-04-20", "meso_id": "M11", "meso_name": "M11 \u2013 Apr/May 2026", "week": "1", "muscle": "Quads", "exercise": "Hip Adduction", "weight": 30.0, "reps": 6, "volume": 180.0}, {"date": "2026-04-20", "meso_id": "M11", "meso_name": "M11 \u2013 Apr/May 2026", "week": "1", "muscle": "Glutes", "exercise": "Hip Abduction Machine", "weight": 30.0, "reps": 6, "volume": 180.0}, {"date": "2026-04-20", "meso_id": "M11", "meso_name": "M11 \u2013 Apr/May 2026", "week": "1", "muscle": "Glutes", "exercise": "Hip Abduction Machine", "weight": 30.0, "reps": 6, "volume": 180.0}, {"date": "2026-04-21", "meso_id": "M11", "meso_name": "M11 \u2013 Apr/May 2026", "week": "1", "muscle": "Triceps", "exercise": "Standing Tricep Extension", "weight": 35.0, "reps": 6, "volume": 210.0}, {"date": "2026-04-21", "meso_id": "M11", "meso_name": "M11 \u2013 Apr/May 2026", "week": "1", "muscle": "Triceps", "exercise": "Standing Tricep Extension", "weight": 35.0, "reps": 6, "volume": 210.0}, {"date": "2026-04-21", "meso_id": "M11", "meso_name": "M11 \u2013 Apr/May 2026", "week": "1", "muscle": "Triceps", "exercise": "Standing Tricep Extension", "weight": 35.0, "reps": 6, "volume": 210.0}, {"date": "2026-04-21", "meso_id": "M11", "meso_name": "M11 \u2013 Apr/May 2026", "week": "1", "muscle": "Triceps", "exercise": "Seated Dip Machine", "weight": 67.5, "reps": 6, "volume": 405.0}, {"date": "2026-04-21", "meso_id": "M11", "meso_name": "M11 \u2013 Apr/May 2026", "week": "1", "muscle": "Triceps", "exercise": "Seated Dip Machine", "weight": 67.5, "reps": 6, "volume": 405.0}, {"date": "2026-04-21", "meso_id": "M11", "meso_name": "M11 \u2013 Apr/May 2026", "week": "1", "muscle": "Triceps", "exercise": "Seated Dip Machine", "weight": 67.5, "reps": 6, "volume": 405.0}, {"date": "2026-04-21", "meso_id": "M11", "meso_name": "M11 \u2013 Apr/May 2026", "week": "1", "muscle": "Triceps", "exercise": "Seated Triceps Pushdown", "weight": 30.0, "reps": 6, "volume": 180.0}, {"date": "2026-04-21", "meso_id": "M11", "meso_name": "M11 \u2013 Apr/May 2026", "week": "1", "muscle": "Triceps", "exercise": "Seated Triceps Pushdown", "weight": 30.0, "reps": 6, "volume": 180.0}, {"date": "2026-04-21", "meso_id": "M11", "meso_name": "M11 \u2013 Apr/May 2026", "week": "1", "muscle": "Triceps", "exercise": "Seated Triceps Pushdown", "weight": 30.0, "reps": 6, "volume": 180.0}, {"date": "2026-04-21", "meso_id": "M11", "meso_name": "M11 \u2013 Apr/May 2026", "week": "1", "muscle": "Forearms", "exercise": "Bent Over Grip Strength", "weight": 37.5, "reps": 5, "volume": 187.5}, {"date": "2026-04-21", "meso_id": "M11", "meso_name": "M11 \u2013 Apr/May 2026", "week": "1", "muscle": "Forearms", "exercise": "Bent Over Grip Strength", "weight": 37.5, "reps": 5, "volume": 187.5}, {"date": "2026-04-21", "meso_id": "M11", "meso_name": "M11 \u2013 Apr/May 2026", "week": "1", "muscle": "Forearms", "exercise": "Bent Over Grip Strength", "weight": 37.5, "reps": 5, "volume": 187.5}, {"date": "2026-04-21", "meso_id": "M11", "meso_name": "M11 \u2013 Apr/May 2026", "week": "1", "muscle": "Glutes", "exercise": "Reverse Glute Pendulum Machine", "weight": 60.0, "reps": 6, "volume": 360.0}, {"date": "2026-04-21", "meso_id": "M11", "meso_name": "M11 \u2013 Apr/May 2026", "week": "1", "muscle": "Glutes", "exercise": "Reverse Glute Pendulum Machine", "weight": 60.0, "reps": 6, "volume": 360.0}, {"date": "2026-04-21", "meso_id": "M11", "meso_name": "M11 \u2013 Apr/May 2026", "week": "1", "muscle": "Core", "exercise": "Cable Crunch", "weight": 60.0, "reps": 6, "volume": 360.0}, {"date": "2026-04-21", "meso_id": "M11", "meso_name": "M11 \u2013 Apr/May 2026", "week": "1", "muscle": "Core", "exercise": "Cable Crunch", "weight": 60.0, "reps": 6, "volume": 360.0}, {"date": "2026-04-21", "meso_id": "M11", "meso_name": "M11 \u2013 Apr/May 2026", "week": "1", "muscle": "Back", "exercise": "Reverse Hyper Extension", "weight": 15.0, "reps": 5, "volume": 75.0}, {"date": "2026-04-21", "meso_id": "M11", "meso_name": "M11 \u2013 Apr/May 2026", "week": "1", "muscle": "Back", "exercise": "Reverse Hyper Extension", "weight": 15.0, "reps": 5, "volume": 75.0}, {"date": "2026-04-21", "meso_id": "M11", "meso_name": "M11 \u2013 Apr/May 2026", "week": "1", "muscle": "Shoulders", "exercise": "Plate Loaded Lat Raises", "weight": 7.5, "reps": 4, "volume": 30.0}, {"date": "2026-04-21", "meso_id": "M11", "meso_name": "M11 \u2013 Apr/May 2026", "week": "1", "muscle": "Shoulders", "exercise": "Plate Loaded Lat Raises", "weight": 7.5, "reps": 4, "volume": 30.0}, {"date": "2026-04-21", "meso_id": "M11", "meso_name": "M11 \u2013 Apr/May 2026", "week": "1", "muscle": "Shoulders", "exercise": "Plate Loaded Lat Raises", "weight": 7.5, "reps": 4, "volume": 30.0}, {"date": "2026-04-22", "meso_id": "M11", "meso_name": "M11 \u2013 Apr/May 2026", "week": "1", "muscle": "Back", "exercise": "T Bar Row", "weight": 20.0, "reps": 5, "volume": 100.0}, {"date": "2026-04-22", "meso_id": "M11", "meso_name": "M11 \u2013 Apr/May 2026", "week": "1", "muscle": "Back", "exercise": "T Bar Row", "weight": 20.0, "reps": 5, "volume": 100.0}, {"date": "2026-04-22", "meso_id": "M11", "meso_name": "M11 \u2013 Apr/May 2026", "week": "1", "muscle": "Back", "exercise": "T Bar Row", "weight": 20.0, "reps": 5, "volume": 100.0}, {"date": "2026-04-22", "meso_id": "M11", "meso_name": "M11 \u2013 Apr/May 2026", "week": "1", "muscle": "Back", "exercise": "Seated Cable Row (Single Arm)", "weight": 6.0, "reps": 5, "volume": 30.0}, {"date": "2026-04-22", "meso_id": "M11", "meso_name": "M11 \u2013 Apr/May 2026", "week": "1", "muscle": "Back", "exercise": "Seated Cable Row (Single Arm)", "weight": 6.0, "reps": 5, "volume": 30.0}, {"date": "2026-04-22", "meso_id": "M11", "meso_name": "M11 \u2013 Apr/May 2026", "week": "1", "muscle": "Back", "exercise": "Seated Cable Row (Single Arm)", "weight": 6.0, "reps": 5, "volume": 30.0}, {"date": "2026-04-22", "meso_id": "M11", "meso_name": "M11 \u2013 Apr/May 2026", "week": "1", "muscle": "Chest", "exercise": "Incline Dumbbell Press", "weight": 20.0, "reps": 5, "volume": 100.0}, {"date": "2026-04-22", "meso_id": "M11", "meso_name": "M11 \u2013 Apr/May 2026", "week": "1", "muscle": "Chest", "exercise": "Incline Dumbbell Press", "weight": 20.0, "reps": 5, "volume": 100.0}, {"date": "2026-04-22", "meso_id": "M11", "meso_name": "M11 \u2013 Apr/May 2026", "week": "1", "muscle": "Chest", "exercise": "Incline Dumbbell Press", "weight": 20.0, "reps": 5, "volume": 100.0}, {"date": "2026-04-22", "meso_id": "M11", "meso_name": "M11 \u2013 Apr/May 2026", "week": "1", "muscle": "Hamstrings", "exercise": "Lying Leg Curl", "weight": 15.0, "reps": 4, "volume": 60.0}, {"date": "2026-04-22", "meso_id": "M11", "meso_name": "M11 \u2013 Apr/May 2026", "week": "1", "muscle": "Hamstrings", "exercise": "Lying Leg Curl", "weight": 15.0, "reps": 4, "volume": 60.0}, {"date": "2026-04-22", "meso_id": "M11", "meso_name": "M11 \u2013 Apr/May 2026", "week": "1", "muscle": "Core", "exercise": "Crunch Machine Upstairs", "weight": 22.5, "reps": 6, "volume": 135.0}, {"date": "2026-04-22", "meso_id": "M11", "meso_name": "M11 \u2013 Apr/May 2026", "week": "1", "muscle": "Core", "exercise": "Crunch Machine Upstairs", "weight": 22.5, "reps": 6, "volume": 135.0}, {"date": "2026-04-22", "meso_id": "M11", "meso_name": "M11 \u2013 Apr/May 2026", "week": "1", "muscle": "Shoulders", "exercise": "Dumbbell Front Raise", "weight": 6.0, "reps": 7, "volume": 42.0}, {"date": "2026-04-22", "meso_id": "M11", "meso_name": "M11 \u2013 Apr/May 2026", "week": "1", "muscle": "Shoulders", "exercise": "Dumbbell Front Raise", "weight": 6.0, "reps": 7, "volume": 42.0}, {"date": "2026-04-22", "meso_id": "M11", "meso_name": "M11 \u2013 Apr/May 2026", "week": "1", "muscle": "Shoulders", "exercise": "Smith Machine Upright Row", "weight": 10.0, "reps": 7, "volume": 70.0}, {"date": "2026-04-22", "meso_id": "M11", "meso_name": "M11 \u2013 Apr/May 2026", "week": "1", "muscle": "Shoulders", "exercise": "Smith Machine Upright Row", "weight": 10.0, "reps": 7, "volume": 70.0}, {"date": "2026-04-22", "meso_id": "M11", "meso_name": "M11 \u2013 Apr/May 2026", "week": "1", "muscle": "Back", "exercise": "Watson Dual Stack Pulldown", "weight": 7.0, "reps": 5, "volume": 35.0}, {"date": "2026-04-22", "meso_id": "M11", "meso_name": "M11 \u2013 Apr/May 2026", "week": "1", "muscle": "Back", "exercise": "Watson Dual Stack Pulldown", "weight": 7.0, "reps": 5, "volume": 35.0}, {"date": "2026-04-22", "meso_id": "M11", "meso_name": "M11 \u2013 Apr/May 2026", "week": "1", "muscle": "Back", "exercise": "Watson Dual Stack Pulldown", "weight": 7.0, "reps": 5, "volume": 35.0}, {"date": "2026-04-23", "meso_id": "M11", "meso_name": "M11 \u2013 Apr/May 2026", "week": "1", "muscle": "Shoulders", "exercise": "Seated Rear Delt Shoulder", "weight": 50.0, "reps": 5, "volume": 250.0}, {"date": "2026-04-23", "meso_id": "M11", "meso_name": "M11 \u2013 Apr/May 2026", "week": "1", "muscle": "Shoulders", "exercise": "Seated Rear Delt Shoulder", "weight": 50.0, "reps": 5, "volume": 250.0}, {"date": "2026-04-23", "meso_id": "M11", "meso_name": "M11 \u2013 Apr/May 2026", "week": "1", "muscle": "Shoulders", "exercise": "Seated Rear Delt Shoulder", "weight": 50.0, "reps": 5, "volume": 250.0}, {"date": "2026-04-23", "meso_id": "M11", "meso_name": "M11 \u2013 Apr/May 2026", "week": "1", "muscle": "Shoulders", "exercise": "Machine Shoulder Press", "weight": 40.0, "reps": 6, "volume": 240.0}, {"date": "2026-04-23", "meso_id": "M11", "meso_name": "M11 \u2013 Apr/May 2026", "week": "1", "muscle": "Shoulders", "exercise": "Machine Shoulder Press", "weight": 40.0, "reps": 6, "volume": 240.0}, {"date": "2026-04-23", "meso_id": "M11", "meso_name": "M11 \u2013 Apr/May 2026", "week": "1", "muscle": "Shoulders", "exercise": "Machine Shoulder Press", "weight": 40.0, "reps": 6, "volume": 240.0}, {"date": "2026-04-23", "meso_id": "M11", "meso_name": "M11 \u2013 Apr/May 2026", "week": "1", "muscle": "Shoulders", "exercise": "Cable Lateral Raise (Single Arm)", "weight": 3.0, "reps": 8, "volume": 24.0}, {"date": "2026-04-23", "meso_id": "M11", "meso_name": "M11 \u2013 Apr/May 2026", "week": "1", "muscle": "Shoulders", "exercise": "Cable Lateral Raise (Single Arm)", "weight": 3.0, "reps": 8, "volume": 24.0}, {"date": "2026-04-23", "meso_id": "M11", "meso_name": "M11 \u2013 Apr/May 2026", "week": "1", "muscle": "Shoulders", "exercise": "Cable Lateral Raise (Single Arm)", "weight": 3.0, "reps": 8, "volume": 24.0}, {"date": "2026-04-23", "meso_id": "M11", "meso_name": "M11 \u2013 Apr/May 2026", "week": "1", "muscle": "Forearms", "exercise": "Bent Over Grip Strength", "weight": 37.5, "reps": 5, "volume": 187.5}, {"date": "2026-04-23", "meso_id": "M11", "meso_name": "M11 \u2013 Apr/May 2026", "week": "1", "muscle": "Forearms", "exercise": "Bent Over Grip Strength", "weight": 37.5, "reps": 5, "volume": 187.5}, {"date": "2026-04-23", "meso_id": "M11", "meso_name": "M11 \u2013 Apr/May 2026", "week": "1", "muscle": "Forearms", "exercise": "Bent Over Grip Strength", "weight": 37.5, "reps": 5, "volume": 187.5}, {"date": "2026-04-23", "meso_id": "M11", "meso_name": "M11 \u2013 Apr/May 2026", "week": "1", "muscle": "Quads", "exercise": "Leg Press", "weight": 55.0, "reps": 5, "volume": 275.0}, {"date": "2026-04-23", "meso_id": "M11", "meso_name": "M11 \u2013 Apr/May 2026", "week": "1", "muscle": "Quads", "exercise": "Leg Press", "weight": 55.0, "reps": 5, "volume": 275.0}, {"date": "2026-04-23", "meso_id": "M11", "meso_name": "M11 \u2013 Apr/May 2026", "week": "1", "muscle": "Core", "exercise": "Cable Crunch", "weight": 60.0, "reps": 6, "volume": 360.0}, {"date": "2026-04-23", "meso_id": "M11", "meso_name": "M11 \u2013 Apr/May 2026", "week": "1", "muscle": "Core", "exercise": "Cable Crunch", "weight": 60.0, "reps": 6, "volume": 360.0}, {"date": "2026-04-23", "meso_id": "M11", "meso_name": "M11 \u2013 Apr/May 2026", "week": "1", "muscle": "Core", "exercise": "Cable Twist", "weight": 5.0, "reps": 9, "volume": 45.0}, {"date": "2026-04-23", "meso_id": "M11", "meso_name": "M11 \u2013 Apr/May 2026", "week": "1", "muscle": "Core", "exercise": "Cable Twist", "weight": 5.0, "reps": 9, "volume": 45.0}, {"date": "2026-04-23", "meso_id": "M11", "meso_name": "M11 \u2013 Apr/May 2026", "week": "1", "muscle": "Back", "exercise": "Seated Cable Row", "weight": 41.0, "reps": 6, "volume": 246.0}, {"date": "2026-04-23", "meso_id": "M11", "meso_name": "M11 \u2013 Apr/May 2026", "week": "1", "muscle": "Back", "exercise": "Seated Cable Row", "weight": 41.0, "reps": 6, "volume": 246.0}, {"date": "2026-04-26", "meso_id": "M11", "meso_name": "M11 \u2013 Apr/May 2026", "week": "2", "muscle": "Chest", "exercise": "Seated Chest Press", "weight": 45.0, "reps": 6, "volume": 270.0}, {"date": "2026-04-26", "meso_id": "M11", "meso_name": "M11 \u2013 Apr/May 2026", "week": "2", "muscle": "Chest", "exercise": "Seated Chest Press", "weight": 45.0, "reps": 6, "volume": 270.0}, {"date": "2026-04-26", "meso_id": "M11", "meso_name": "M11 \u2013 Apr/May 2026", "week": "2", "muscle": "Chest", "exercise": "Seated Chest Press", "weight": 45.0, "reps": 6, "volume": 270.0}, {"date": "2026-04-26", "meso_id": "M11", "meso_name": "M11 \u2013 Apr/May 2026", "week": "2", "muscle": "Chest", "exercise": "Seated Flys", "weight": 3.75, "reps": 6, "volume": 22.5}, {"date": "2026-04-26", "meso_id": "M11", "meso_name": "M11 \u2013 Apr/May 2026", "week": "2", "muscle": "Chest", "exercise": "Seated Flys", "weight": 3.75, "reps": 6, "volume": 22.5}, {"date": "2026-04-26", "meso_id": "M11", "meso_name": "M11 \u2013 Apr/May 2026", "week": "2", "muscle": "Chest", "exercise": "Seated Flys", "weight": 3.75, "reps": 6, "volume": 22.5}, {"date": "2026-04-26", "meso_id": "M11", "meso_name": "M11 \u2013 Apr/May 2026", "week": "2", "muscle": "Chest", "exercise": "Decline Chest Press", "weight": 75.0, "reps": 6, "volume": 450.0}, {"date": "2026-04-26", "meso_id": "M11", "meso_name": "M11 \u2013 Apr/May 2026", "week": "2", "muscle": "Chest", "exercise": "Decline Chest Press", "weight": 75.0, "reps": 6, "volume": 450.0}, {"date": "2026-04-26", "meso_id": "M11", "meso_name": "M11 \u2013 Apr/May 2026", "week": "2", "muscle": "Chest", "exercise": "Decline Chest Press", "weight": 75.0, "reps": 6, "volume": 450.0}, {"date": "2026-04-26", "meso_id": "M11", "meso_name": "M11 \u2013 Apr/May 2026", "week": "2", "muscle": "Forearms", "exercise": "Bent Over Grip Strength", "weight": 37.5, "reps": 6, "volume": 225.0}, {"date": "2026-04-26", "meso_id": "M11", "meso_name": "M11 \u2013 Apr/May 2026", "week": "2", "muscle": "Forearms", "exercise": "Bent Over Grip Strength", "weight": 37.5, "reps": 6, "volume": 225.0}, {"date": "2026-04-26", "meso_id": "M11", "meso_name": "M11 \u2013 Apr/May 2026", "week": "2", "muscle": "Forearms", "exercise": "Bent Over Grip Strength", "weight": 37.5, "reps": 6, "volume": 225.0}, {"date": "2026-04-26", "meso_id": "M11", "meso_name": "M11 \u2013 Apr/May 2026", "week": "2", "muscle": "Glutes", "exercise": "Reverse Glute Pendulum Machine", "weight": 60.0, "reps": 7, "volume": 420.0}, {"date": "2026-04-26", "meso_id": "M11", "meso_name": "M11 \u2013 Apr/May 2026", "week": "2", "muscle": "Glutes", "exercise": "Reverse Glute Pendulum Machine", "weight": 60.0, "reps": 7, "volume": 420.0}, {"date": "2026-04-26", "meso_id": "M11", "meso_name": "M11 \u2013 Apr/May 2026", "week": "2", "muscle": "Core", "exercise": "Cable Crunch", "weight": 60.0, "reps": 7, "volume": 420.0}, {"date": "2026-04-26", "meso_id": "M11", "meso_name": "M11 \u2013 Apr/May 2026", "week": "2", "muscle": "Core", "exercise": "Cable Crunch", "weight": 60.0, "reps": 7, "volume": 420.0}, {"date": "2026-04-26", "meso_id": "M11", "meso_name": "M11 \u2013 Apr/May 2026", "week": "2", "muscle": "Calves", "exercise": "Smith Machine Calves", "weight": 47.5, "reps": 7, "volume": 332.5}, {"date": "2026-04-26", "meso_id": "M11", "meso_name": "M11 \u2013 Apr/May 2026", "week": "2", "muscle": "Calves", "exercise": "Smith Machine Calves", "weight": 47.5, "reps": 7, "volume": 332.5}, {"date": "2026-04-26", "meso_id": "M11", "meso_name": "M11 \u2013 Apr/May 2026", "week": "2", "muscle": "Shoulders", "exercise": "Machine Lateral Raise", "weight": 5.0, "reps": 8, "volume": 40.0}, {"date": "2026-04-26", "meso_id": "M11", "meso_name": "M11 \u2013 Apr/May 2026", "week": "2", "muscle": "Shoulders", "exercise": "Machine Lateral Raise", "weight": 5.0, "reps": 8, "volume": 40.0}, {"date": "2026-04-26", "meso_id": "M11", "meso_name": "M11 \u2013 Apr/May 2026", "week": "2", "muscle": "Shoulders", "exercise": "Machine Lateral Raise", "weight": 5.0, "reps": 8, "volume": 40.0}, {"date": "2026-04-27", "meso_id": "M11", "meso_name": "M11 \u2013 Apr/May 2026", "week": "2", "muscle": "Biceps", "exercise": "EZ Bar Curl (Narrow Grip)", "weight": 20.0, "reps": 6, "volume": 120.0}, {"date": "2026-04-27", "meso_id": "M11", "meso_name": "M11 \u2013 Apr/May 2026", "week": "2", "muscle": "Biceps", "exercise": "EZ Bar Curl (Narrow Grip)", "weight": 20.0, "reps": 6, "volume": 120.0}, {"date": "2026-04-27", "meso_id": "M11", "meso_name": "M11 \u2013 Apr/May 2026", "week": "2", "muscle": "Biceps", "exercise": "EZ Bar Curl (Narrow Grip)", "weight": 20.0, "reps": 6, "volume": 120.0}, {"date": "2026-04-27", "meso_id": "M11", "meso_name": "M11 \u2013 Apr/May 2026", "week": "2", "muscle": "Biceps", "exercise": "Lying Biceps Dumbbell Curl", "weight": 7.5, "reps": 8, "volume": 60.0}, {"date": "2026-04-27", "meso_id": "M11", "meso_name": "M11 \u2013 Apr/May 2026", "week": "2", "muscle": "Biceps", "exercise": "Lying Biceps Dumbbell Curl", "weight": 7.5, "reps": 8, "volume": 60.0}, {"date": "2026-04-27", "meso_id": "M11", "meso_name": "M11 \u2013 Apr/May 2026", "week": "2", "muscle": "Biceps", "exercise": "Lying Biceps Dumbbell Curl", "weight": 7.5, "reps": 8, "volume": 60.0}, {"date": "2026-04-27", "meso_id": "M11", "meso_name": "M11 \u2013 Apr/May 2026", "week": "2", "muscle": "Biceps", "exercise": "Machine Preacher Curl", "weight": 22.5, "reps": 6, "volume": 135.0}, {"date": "2026-04-27", "meso_id": "M11", "meso_name": "M11 \u2013 Apr/May 2026", "week": "2", "muscle": "Biceps", "exercise": "Machine Preacher Curl", "weight": 22.5, "reps": 6, "volume": 135.0}, {"date": "2026-04-27", "meso_id": "M11", "meso_name": "M11 \u2013 Apr/May 2026", "week": "2", "muscle": "Biceps", "exercise": "Machine Preacher Curl", "weight": 22.5, "reps": 6, "volume": 135.0}, {"date": "2026-04-27", "meso_id": "M11", "meso_name": "M11 \u2013 Apr/May 2026", "week": "2", "muscle": "Shoulders", "exercise": "Cable Rope Facepull", "weight": 20.5, "reps": 7, "volume": 143.5}, {"date": "2026-04-27", "meso_id": "M11", "meso_name": "M11 \u2013 Apr/May 2026", "week": "2", "muscle": "Shoulders", "exercise": "Cable Rope Facepull", "weight": 20.5, "reps": 6, "volume": 123.0}, {"date": "2026-04-27", "meso_id": "M11", "meso_name": "M11 \u2013 Apr/May 2026", "week": "2", "muscle": "Shoulders", "exercise": "Cable Rope Facepull", "weight": 20.5, "reps": 6, "volume": 123.0}, {"date": "2026-04-27", "meso_id": "M11", "meso_name": "M11 \u2013 Apr/May 2026", "week": "2", "muscle": "Quads", "exercise": "Leg Press", "weight": 55.0, "reps": 6, "volume": 330.0}, {"date": "2026-04-27", "meso_id": "M11", "meso_name": "M11 \u2013 Apr/May 2026", "week": "2", "muscle": "Quads", "exercise": "Leg Press", "weight": 55.0, "reps": 6, "volume": 330.0}, {"date": "2026-04-27", "meso_id": "M11", "meso_name": "M11 \u2013 Apr/May 2026", "week": "2", "muscle": "Core", "exercise": "Crunch Machine Upstairs", "weight": 22.5, "reps": 7, "volume": 157.5}, {"date": "2026-04-27", "meso_id": "M11", "meso_name": "M11 \u2013 Apr/May 2026", "week": "2", "muscle": "Core", "exercise": "Crunch Machine Upstairs", "weight": 22.5, "reps": 7, "volume": 157.5}, {"date": "2026-04-27", "meso_id": "M11", "meso_name": "M11 \u2013 Apr/May 2026", "week": "2", "muscle": "Quads", "exercise": "Hip Adduction", "weight": 30.0, "reps": 7, "volume": 210.0}, {"date": "2026-04-27", "meso_id": "M11", "meso_name": "M11 \u2013 Apr/May 2026", "week": "2", "muscle": "Quads", "exercise": "Hip Adduction", "weight": 30.0, "reps": 7, "volume": 210.0}, {"date": "2026-04-27", "meso_id": "M11", "meso_name": "M11 \u2013 Apr/May 2026", "week": "2", "muscle": "Glutes", "exercise": "Hip Abduction Machine", "weight": 30.0, "reps": 7, "volume": 210.0}, {"date": "2026-04-27", "meso_id": "M11", "meso_name": "M11 \u2013 Apr/May 2026", "week": "2", "muscle": "Glutes", "exercise": "Hip Abduction Machine", "weight": 30.0, "reps": 5, "volume": 150.0}, {"date": "2026-04-28", "meso_id": "M11", "meso_name": "M11 \u2013 Apr/May 2026", "week": "2", "muscle": "Triceps", "exercise": "Standing Tricep Extension", "weight": 35.0, "reps": 7, "volume": 245.0}, {"date": "2026-04-28", "meso_id": "M11", "meso_name": "M11 \u2013 Apr/May 2026", "week": "2", "muscle": "Triceps", "exercise": "Standing Tricep Extension", "weight": 35.0, "reps": 7, "volume": 245.0}, {"date": "2026-04-28", "meso_id": "M11", "meso_name": "M11 \u2013 Apr/May 2026", "week": "2", "muscle": "Triceps", "exercise": "Standing Tricep Extension", "weight": 35.0, "reps": 6, "volume": 210.0}, {"date": "2026-04-28", "meso_id": "M11", "meso_name": "M11 \u2013 Apr/May 2026", "week": "2", "muscle": "Triceps", "exercise": "Seated Dip Machine", "weight": 67.5, "reps": 7, "volume": 472.5}, {"date": "2026-04-28", "meso_id": "M11", "meso_name": "M11 \u2013 Apr/May 2026", "week": "2", "muscle": "Triceps", "exercise": "Seated Dip Machine", "weight": 67.5, "reps": 7, "volume": 472.5}, {"date": "2026-04-28", "meso_id": "M11", "meso_name": "M11 \u2013 Apr/May 2026", "week": "2", "muscle": "Triceps", "exercise": "Seated Dip Machine", "weight": 67.5, "reps": 7, "volume": 472.5}, {"date": "2026-04-28", "meso_id": "M11", "meso_name": "M11 \u2013 Apr/May 2026", "week": "2", "muscle": "Triceps", "exercise": "Seated Triceps Pushdown", "weight": 30.0, "reps": 7, "volume": 210.0}, {"date": "2026-04-28", "meso_id": "M11", "meso_name": "M11 \u2013 Apr/May 2026", "week": "2", "muscle": "Triceps", "exercise": "Seated Triceps Pushdown", "weight": 30.0, "reps": 7, "volume": 210.0}, {"date": "2026-04-28", "meso_id": "M11", "meso_name": "M11 \u2013 Apr/May 2026", "week": "2", "muscle": "Triceps", "exercise": "Seated Triceps Pushdown", "weight": 30.0, "reps": 6, "volume": 180.0}, {"date": "2026-04-28", "meso_id": "M11", "meso_name": "M11 \u2013 Apr/May 2026", "week": "2", "muscle": "Forearms", "exercise": "Bent Over Grip Strength", "weight": 37.5, "reps": 6, "volume": 225.0}, {"date": "2026-04-28", "meso_id": "M11", "meso_name": "M11 \u2013 Apr/May 2026", "week": "2", "muscle": "Forearms", "exercise": "Bent Over Grip Strength", "weight": 37.5, "reps": 6, "volume": 225.0}, {"date": "2026-04-28", "meso_id": "M11", "meso_name": "M11 \u2013 Apr/May 2026", "week": "2", "muscle": "Forearms", "exercise": "Bent Over Grip Strength", "weight": 37.5, "reps": 5, "volume": 187.5}, {"date": "2026-04-28", "meso_id": "M11", "meso_name": "M11 \u2013 Apr/May 2026", "week": "2", "muscle": "Glutes", "exercise": "Reverse Glute Pendulum Machine", "weight": 60.0, "reps": 7, "volume": 420.0}, {"date": "2026-04-28", "meso_id": "M11", "meso_name": "M11 \u2013 Apr/May 2026", "week": "2", "muscle": "Glutes", "exercise": "Reverse Glute Pendulum Machine", "weight": 60.0, "reps": 7, "volume": 420.0}, {"date": "2026-04-28", "meso_id": "M11", "meso_name": "M11 \u2013 Apr/May 2026", "week": "2", "muscle": "Core", "exercise": "Cable Crunch", "weight": 60.0, "reps": 7, "volume": 420.0}, {"date": "2026-04-28", "meso_id": "M11", "meso_name": "M11 \u2013 Apr/May 2026", "week": "2", "muscle": "Core", "exercise": "Cable Crunch", "weight": 60.0, "reps": 6, "volume": 360.0}, {"date": "2026-04-28", "meso_id": "M11", "meso_name": "M11 \u2013 Apr/May 2026", "week": "2", "muscle": "Back", "exercise": "Reverse Hyper Extension", "weight": 15.0, "reps": 6, "volume": 90.0}, {"date": "2026-04-28", "meso_id": "M11", "meso_name": "M11 \u2013 Apr/May 2026", "week": "2", "muscle": "Back", "exercise": "Reverse Hyper Extension", "weight": 15.0, "reps": 6, "volume": 90.0}, {"date": "2026-04-28", "meso_id": "M11", "meso_name": "M11 \u2013 Apr/May 2026", "week": "2", "muscle": "Shoulders", "exercise": "Plate Loaded Lat Raises", "weight": 7.5, "reps": 5, "volume": 37.5}, {"date": "2026-04-28", "meso_id": "M11", "meso_name": "M11 \u2013 Apr/May 2026", "week": "2", "muscle": "Shoulders", "exercise": "Plate Loaded Lat Raises", "weight": 7.5, "reps": 5, "volume": 37.5}, {"date": "2026-04-28", "meso_id": "M11", "meso_name": "M11 \u2013 Apr/May 2026", "week": "2", "muscle": "Shoulders", "exercise": "Plate Loaded Lat Raises", "weight": 7.5, "reps": 5, "volume": 37.5}, {"date": "2026-04-29", "meso_id": "M11", "meso_name": "M11 \u2013 Apr/May 2026", "week": "2", "muscle": "Back", "exercise": "T Bar Row", "weight": 20.0, "reps": 6, "volume": 120.0}, {"date": "2026-04-29", "meso_id": "M11", "meso_name": "M11 \u2013 Apr/May 2026", "week": "2", "muscle": "Back", "exercise": "T Bar Row", "weight": 20.0, "reps": 6, "volume": 120.0}, {"date": "2026-04-29", "meso_id": "M11", "meso_name": "M11 \u2013 Apr/May 2026", "week": "2", "muscle": "Back", "exercise": "T Bar Row", "weight": 20.0, "reps": 6, "volume": 120.0}, {"date": "2026-04-29", "meso_id": "M11", "meso_name": "M11 \u2013 Apr/May 2026", "week": "2", "muscle": "Back", "exercise": "Seated Cable Row (Single Arm)", "weight": 6.0, "reps": 6, "volume": 36.0}, {"date": "2026-04-29", "meso_id": "M11", "meso_name": "M11 \u2013 Apr/May 2026", "week": "2", "muscle": "Back", "exercise": "Seated Cable Row (Single Arm)", "weight": 6.0, "reps": 6, "volume": 36.0}, {"date": "2026-04-29", "meso_id": "M11", "meso_name": "M11 \u2013 Apr/May 2026", "week": "2", "muscle": "Back", "exercise": "Seated Cable Row (Single Arm)", "weight": 6.0, "reps": 6, "volume": 36.0}, {"date": "2026-04-29", "meso_id": "M11", "meso_name": "M11 \u2013 Apr/May 2026", "week": "2", "muscle": "Chest", "exercise": "Incline Dumbbell Press", "weight": 20.0, "reps": 6, "volume": 120.0}, {"date": "2026-04-29", "meso_id": "M11", "meso_name": "M11 \u2013 Apr/May 2026", "week": "2", "muscle": "Chest", "exercise": "Incline Dumbbell Press", "weight": 20.0, "reps": 6, "volume": 120.0}, {"date": "2026-04-29", "meso_id": "M11", "meso_name": "M11 \u2013 Apr/May 2026", "week": "2", "muscle": "Chest", "exercise": "Incline Dumbbell Press", "weight": 20.0, "reps": 6, "volume": 120.0}, {"date": "2026-04-29", "meso_id": "M11", "meso_name": "M11 \u2013 Apr/May 2026", "week": "2", "muscle": "Hamstrings", "exercise": "Lying Leg Curl", "weight": 15.0, "reps": 5, "volume": 75.0}, {"date": "2026-04-29", "meso_id": "M11", "meso_name": "M11 \u2013 Apr/May 2026", "week": "2", "muscle": "Hamstrings", "exercise": "Lying Leg Curl", "weight": 15.0, "reps": 5, "volume": 75.0}, {"date": "2026-04-29", "meso_id": "M11", "meso_name": "M11 \u2013 Apr/May 2026", "week": "2", "muscle": "Core", "exercise": "Crunch Machine Upstairs", "weight": 22.5, "reps": 7, "volume": 157.5}, {"date": "2026-04-29", "meso_id": "M11", "meso_name": "M11 \u2013 Apr/May 2026", "week": "2", "muscle": "Core", "exercise": "Crunch Machine Upstairs", "weight": 22.5, "reps": 7, "volume": 157.5}, {"date": "2026-04-29", "meso_id": "M11", "meso_name": "M11 \u2013 Apr/May 2026", "week": "2", "muscle": "Shoulders", "exercise": "Dumbbell Front Raise", "weight": 6.0, "reps": 8, "volume": 48.0}, {"date": "2026-04-29", "meso_id": "M11", "meso_name": "M11 \u2013 Apr/May 2026", "week": "2", "muscle": "Shoulders", "exercise": "Dumbbell Front Raise", "weight": 6.0, "reps": 8, "volume": 48.0}, {"date": "2026-04-29", "meso_id": "M11", "meso_name": "M11 \u2013 Apr/May 2026", "week": "2", "muscle": "Shoulders", "exercise": "Smith Machine Upright Row", "weight": 10.0, "reps": 8, "volume": 80.0}, {"date": "2026-04-29", "meso_id": "M11", "meso_name": "M11 \u2013 Apr/May 2026", "week": "2", "muscle": "Shoulders", "exercise": "Smith Machine Upright Row", "weight": 10.0, "reps": 8, "volume": 80.0}, {"date": "2026-04-29", "meso_id": "M11", "meso_name": "M11 \u2013 Apr/May 2026", "week": "2", "muscle": "Back", "exercise": "Watson Dual Stack Pulldown", "weight": 7.0, "reps": 6, "volume": 42.0}, {"date": "2026-04-29", "meso_id": "M11", "meso_name": "M11 \u2013 Apr/May 2026", "week": "2", "muscle": "Back", "exercise": "Watson Dual Stack Pulldown", "weight": 7.0, "reps": 6, "volume": 42.0}, {"date": "2026-04-29", "meso_id": "M11", "meso_name": "M11 \u2013 Apr/May 2026", "week": "2", "muscle": "Back", "exercise": "Watson Dual Stack Pulldown", "weight": 7.0, "reps": 6, "volume": 42.0}, {"date": "2026-04-30", "meso_id": "M11", "meso_name": "M11 \u2013 Apr/May 2026", "week": "2", "muscle": "Shoulders", "exercise": "Seated Rear Delt Shoulder", "weight": 50.0, "reps": 6, "volume": 300.0}, {"date": "2026-04-30", "meso_id": "M11", "meso_name": "M11 \u2013 Apr/May 2026", "week": "2", "muscle": "Shoulders", "exercise": "Seated Rear Delt Shoulder", "weight": 50.0, "reps": 6, "volume": 300.0}, {"date": "2026-04-30", "meso_id": "M11", "meso_name": "M11 \u2013 Apr/May 2026", "week": "2", "muscle": "Shoulders", "exercise": "Seated Rear Delt Shoulder", "weight": 50.0, "reps": 6, "volume": 300.0}, {"date": "2026-04-30", "meso_id": "M11", "meso_name": "M11 \u2013 Apr/May 2026", "week": "2", "muscle": "Shoulders", "exercise": "Machine Shoulder Press", "weight": 40.0, "reps": 7, "volume": 280.0}, {"date": "2026-04-30", "meso_id": "M11", "meso_name": "M11 \u2013 Apr/May 2026", "week": "2", "muscle": "Shoulders", "exercise": "Machine Shoulder Press", "weight": 40.0, "reps": 7, "volume": 280.0}, {"date": "2026-04-30", "meso_id": "M11", "meso_name": "M11 \u2013 Apr/May 2026", "week": "2", "muscle": "Shoulders", "exercise": "Machine Shoulder Press", "weight": 40.0, "reps": 7, "volume": 280.0}, {"date": "2026-04-30", "meso_id": "M11", "meso_name": "M11 \u2013 Apr/May 2026", "week": "2", "muscle": "Shoulders", "exercise": "Cable Lateral Raise (Single Arm)", "weight": 3.0, "reps": 9, "volume": 27.0}, {"date": "2026-04-30", "meso_id": "M11", "meso_name": "M11 \u2013 Apr/May 2026", "week": "2", "muscle": "Shoulders", "exercise": "Cable Lateral Raise (Single Arm)", "weight": 3.0, "reps": 9, "volume": 27.0}, {"date": "2026-04-30", "meso_id": "M11", "meso_name": "M11 \u2013 Apr/May 2026", "week": "2", "muscle": "Shoulders", "exercise": "Cable Lateral Raise (Single Arm)", "weight": 3.0, "reps": 9, "volume": 27.0}, {"date": "2026-04-30", "meso_id": "M11", "meso_name": "M11 \u2013 Apr/May 2026", "week": "2", "muscle": "Forearms", "exercise": "Bent Over Grip Strength", "weight": 37.5, "reps": 6, "volume": 225.0}, {"date": "2026-04-30", "meso_id": "M11", "meso_name": "M11 \u2013 Apr/May 2026", "week": "2", "muscle": "Forearms", "exercise": "Bent Over Grip Strength", "weight": 37.5, "reps": 6, "volume": 225.0}, {"date": "2026-04-30", "meso_id": "M11", "meso_name": "M11 \u2013 Apr/May 2026", "week": "2", "muscle": "Forearms", "exercise": "Bent Over Grip Strength", "weight": 37.5, "reps": 6, "volume": 225.0}, {"date": "2026-04-30", "meso_id": "M11", "meso_name": "M11 \u2013 Apr/May 2026", "week": "2", "muscle": "Quads", "exercise": "Leg Press", "weight": 55.0, "reps": 6, "volume": 330.0}, {"date": "2026-04-30", "meso_id": "M11", "meso_name": "M11 \u2013 Apr/May 2026", "week": "2", "muscle": "Quads", "exercise": "Leg Press", "weight": 55.0, "reps": 6, "volume": 330.0}, {"date": "2026-04-30", "meso_id": "M11", "meso_name": "M11 \u2013 Apr/May 2026", "week": "2", "muscle": "Core", "exercise": "Cable Crunch", "weight": 60.0, "reps": 7, "volume": 420.0}, {"date": "2026-04-30", "meso_id": "M11", "meso_name": "M11 \u2013 Apr/May 2026", "week": "2", "muscle": "Core", "exercise": "Cable Crunch", "weight": 60.0, "reps": 7, "volume": 420.0}, {"date": "2026-04-30", "meso_id": "M11", "meso_name": "M11 \u2013 Apr/May 2026", "week": "2", "muscle": "Core", "exercise": "Cable Twist", "weight": 5.0, "reps": 10, "volume": 50.0}, {"date": "2026-04-30", "meso_id": "M11", "meso_name": "M11 \u2013 Apr/May 2026", "week": "2", "muscle": "Core", "exercise": "Cable Twist", "weight": 5.0, "reps": 10, "volume": 50.0}, {"date": "2026-04-30", "meso_id": "M11", "meso_name": "M11 \u2013 Apr/May 2026", "week": "2", "muscle": "Back", "exercise": "Seated Cable Row", "weight": 41.0, "reps": 7, "volume": 287.0}, {"date": "2026-04-30", "meso_id": "M11", "meso_name": "M11 \u2013 Apr/May 2026", "week": "2", "muscle": "Back", "exercise": "Seated Cable Row", "weight": 41.0, "reps": 7, "volume": 287.0}, {"date": "2026-05-03", "meso_id": "M11", "meso_name": "M11 \u2013 Apr/May 2026", "week": "3", "muscle": "Chest", "exercise": "Seated Chest Press", "weight": 45.0, "reps": 7, "volume": 315.0}, {"date": "2026-05-03", "meso_id": "M11", "meso_name": "M11 \u2013 Apr/May 2026", "week": "3", "muscle": "Chest", "exercise": "Seated Chest Press", "weight": 45.0, "reps": 7, "volume": 315.0}, {"date": "2026-05-03", "meso_id": "M11", "meso_name": "M11 \u2013 Apr/May 2026", "week": "3", "muscle": "Chest", "exercise": "Seated Chest Press", "weight": 45.0, "reps": 7, "volume": 315.0}, {"date": "2026-05-03", "meso_id": "M11", "meso_name": "M11 \u2013 Apr/May 2026", "week": "3", "muscle": "Chest", "exercise": "Seated Flys", "weight": 3.75, "reps": 7, "volume": 26.2}, {"date": "2026-05-03", "meso_id": "M11", "meso_name": "M11 \u2013 Apr/May 2026", "week": "3", "muscle": "Chest", "exercise": "Seated Flys", "weight": 3.75, "reps": 7, "volume": 26.2}, {"date": "2026-05-03", "meso_id": "M11", "meso_name": "M11 \u2013 Apr/May 2026", "week": "3", "muscle": "Chest", "exercise": "Seated Flys", "weight": 3.75, "reps": 7, "volume": 26.2}, {"date": "2026-05-03", "meso_id": "M11", "meso_name": "M11 \u2013 Apr/May 2026", "week": "3", "muscle": "Chest", "exercise": "Decline Chest Press", "weight": 75.0, "reps": 7, "volume": 525.0}, {"date": "2026-05-03", "meso_id": "M11", "meso_name": "M11 \u2013 Apr/May 2026", "week": "3", "muscle": "Chest", "exercise": "Decline Chest Press", "weight": 75.0, "reps": 7, "volume": 525.0}, {"date": "2026-05-03", "meso_id": "M11", "meso_name": "M11 \u2013 Apr/May 2026", "week": "3", "muscle": "Chest", "exercise": "Decline Chest Press", "weight": 75.0, "reps": 7, "volume": 525.0}, {"date": "2026-05-03", "meso_id": "M11", "meso_name": "M11 \u2013 Apr/May 2026", "week": "3", "muscle": "Forearms", "exercise": "Bent Over Grip Strength", "weight": 37.5, "reps": 7, "volume": 262.5}, {"date": "2026-05-03", "meso_id": "M11", "meso_name": "M11 \u2013 Apr/May 2026", "week": "3", "muscle": "Forearms", "exercise": "Bent Over Grip Strength", "weight": 37.5, "reps": 7, "volume": 262.5}, {"date": "2026-05-03", "meso_id": "M11", "meso_name": "M11 \u2013 Apr/May 2026", "week": "3", "muscle": "Forearms", "exercise": "Bent Over Grip Strength", "weight": 37.5, "reps": 7, "volume": 262.5}, {"date": "2026-05-03", "meso_id": "M11", "meso_name": "M11 \u2013 Apr/May 2026", "week": "3", "muscle": "Glutes", "exercise": "Reverse Glute Pendulum Machine", "weight": 60.0, "reps": 8, "volume": 480.0}, {"date": "2026-05-03", "meso_id": "M11", "meso_name": "M11 \u2013 Apr/May 2026", "week": "3", "muscle": "Glutes", "exercise": "Reverse Glute Pendulum Machine", "weight": 60.0, "reps": 8, "volume": 480.0}, {"date": "2026-05-03", "meso_id": "M11", "meso_name": "M11 \u2013 Apr/May 2026", "week": "3", "muscle": "Core", "exercise": "Cable Crunch", "weight": 60.0, "reps": 8, "volume": 480.0}, {"date": "2026-05-03", "meso_id": "M11", "meso_name": "M11 \u2013 Apr/May 2026", "week": "3", "muscle": "Core", "exercise": "Cable Crunch", "weight": 60.0, "reps": 8, "volume": 480.0}, {"date": "2026-05-03", "meso_id": "M11", "meso_name": "M11 \u2013 Apr/May 2026", "week": "3", "muscle": "Calves", "exercise": "Smith Machine Calves", "weight": 47.5, "reps": 8, "volume": 380.0}, {"date": "2026-05-03", "meso_id": "M11", "meso_name": "M11 \u2013 Apr/May 2026", "week": "3", "muscle": "Calves", "exercise": "Smith Machine Calves", "weight": 47.5, "reps": 8, "volume": 380.0}, {"date": "2026-05-03", "meso_id": "M11", "meso_name": "M11 \u2013 Apr/May 2026", "week": "3", "muscle": "Shoulders", "exercise": "Machine Lateral Raise", "weight": 5.0, "reps": 9, "volume": 45.0}, {"date": "2026-05-03", "meso_id": "M11", "meso_name": "M11 \u2013 Apr/May 2026", "week": "3", "muscle": "Shoulders", "exercise": "Machine Lateral Raise", "weight": 5.0, "reps": 9, "volume": 45.0}, {"date": "2026-05-03", "meso_id": "M11", "meso_name": "M11 \u2013 Apr/May 2026", "week": "3", "muscle": "Shoulders", "exercise": "Machine Lateral Raise", "weight": 5.0, "reps": 9, "volume": 45.0}, {"date": "2026-05-04", "meso_id": "M11", "meso_name": "M11 \u2013 Apr/May 2026", "week": "3", "muscle": "Biceps", "exercise": "EZ Bar Curl (Narrow Grip)", "weight": 20.0, "reps": 7, "volume": 140.0}, {"date": "2026-05-04", "meso_id": "M11", "meso_name": "M11 \u2013 Apr/May 2026", "week": "3", "muscle": "Biceps", "exercise": "EZ Bar Curl (Narrow Grip)", "weight": 20.0, "reps": 7, "volume": 140.0}, {"date": "2026-05-04", "meso_id": "M11", "meso_name": "M11 \u2013 Apr/May 2026", "week": "3", "muscle": "Biceps", "exercise": "EZ Bar Curl (Narrow Grip)", "weight": 20.0, "reps": 7, "volume": 140.0}, {"date": "2026-05-04", "meso_id": "M11", "meso_name": "M11 \u2013 Apr/May 2026", "week": "3", "muscle": "Biceps", "exercise": "Lying Biceps Dumbbell Curl", "weight": 7.5, "reps": 9, "volume": 67.5}, {"date": "2026-05-04", "meso_id": "M11", "meso_name": "M11 \u2013 Apr/May 2026", "week": "3", "muscle": "Biceps", "exercise": "Lying Biceps Dumbbell Curl", "weight": 7.5, "reps": 9, "volume": 67.5}, {"date": "2026-05-04", "meso_id": "M11", "meso_name": "M11 \u2013 Apr/May 2026", "week": "3", "muscle": "Biceps", "exercise": "Lying Biceps Dumbbell Curl", "weight": 7.5, "reps": 9, "volume": 67.5}, {"date": "2026-05-04", "meso_id": "M11", "meso_name": "M11 \u2013 Apr/May 2026", "week": "3", "muscle": "Biceps", "exercise": "Machine Preacher Curl", "weight": 22.5, "reps": 7, "volume": 157.5}, {"date": "2026-05-04", "meso_id": "M11", "meso_name": "M11 \u2013 Apr/May 2026", "week": "3", "muscle": "Biceps", "exercise": "Machine Preacher Curl", "weight": 22.5, "reps": 5, "volume": 112.5}, {"date": "2026-05-04", "meso_id": "M11", "meso_name": "M11 \u2013 Apr/May 2026", "week": "3", "muscle": "Biceps", "exercise": "Machine Preacher Curl", "weight": 22.5, "reps": 7, "volume": 157.5}, {"date": "2026-05-04", "meso_id": "M11", "meso_name": "M11 \u2013 Apr/May 2026", "week": "3", "muscle": "Shoulders", "exercise": "Cable Rope Facepull", "weight": 20.5, "reps": 8, "volume": 164.0}, {"date": "2026-05-04", "meso_id": "M11", "meso_name": "M11 \u2013 Apr/May 2026", "week": "3", "muscle": "Shoulders", "exercise": "Cable Rope Facepull", "weight": 20.5, "reps": 8, "volume": 164.0}, {"date": "2026-05-04", "meso_id": "M11", "meso_name": "M11 \u2013 Apr/May 2026", "week": "3", "muscle": "Shoulders", "exercise": "Cable Rope Facepull", "weight": 20.5, "reps": 8, "volume": 164.0}, {"date": "2026-05-04", "meso_id": "M11", "meso_name": "M11 \u2013 Apr/May 2026", "week": "3", "muscle": "Quads", "exercise": "Leg Press", "weight": 55.0, "reps": 7, "volume": 385.0}, {"date": "2026-05-04", "meso_id": "M11", "meso_name": "M11 \u2013 Apr/May 2026", "week": "3", "muscle": "Quads", "exercise": "Leg Press", "weight": 55.0, "reps": 7, "volume": 385.0}, {"date": "2026-05-04", "meso_id": "M11", "meso_name": "M11 \u2013 Apr/May 2026", "week": "3", "muscle": "Core", "exercise": "Crunch Machine Upstairs", "weight": 22.5, "reps": 8, "volume": 180.0}, {"date": "2026-05-04", "meso_id": "M11", "meso_name": "M11 \u2013 Apr/May 2026", "week": "3", "muscle": "Core", "exercise": "Crunch Machine Upstairs", "weight": 22.5, "reps": 8, "volume": 180.0}, {"date": "2026-05-04", "meso_id": "M11", "meso_name": "M11 \u2013 Apr/May 2026", "week": "3", "muscle": "Quads", "exercise": "Hip Adduction", "weight": 30.0, "reps": 8, "volume": 240.0}, {"date": "2026-05-04", "meso_id": "M11", "meso_name": "M11 \u2013 Apr/May 2026", "week": "3", "muscle": "Quads", "exercise": "Hip Adduction", "weight": 30.0, "reps": 8, "volume": 240.0}, {"date": "2026-05-04", "meso_id": "M11", "meso_name": "M11 \u2013 Apr/May 2026", "week": "3", "muscle": "Glutes", "exercise": "Hip Abduction Machine", "weight": 30.0, "reps": 8, "volume": 240.0}, {"date": "2026-05-04", "meso_id": "M11", "meso_name": "M11 \u2013 Apr/May 2026", "week": "3", "muscle": "Glutes", "exercise": "Hip Abduction Machine", "weight": 30.0, "reps": 8, "volume": 240.0}, {"date": "2026-05-05", "meso_id": "M11", "meso_name": "M11 \u2013 Apr/May 2026", "week": "3", "muscle": "Triceps", "exercise": "Standing Tricep Extension", "weight": 35.0, "reps": 8, "volume": 280.0}, {"date": "2026-05-05", "meso_id": "M11", "meso_name": "M11 \u2013 Apr/May 2026", "week": "3", "muscle": "Triceps", "exercise": "Standing Tricep Extension", "weight": 35.0, "reps": 8, "volume": 280.0}, {"date": "2026-05-05", "meso_id": "M11", "meso_name": "M11 \u2013 Apr/May 2026", "week": "3", "muscle": "Triceps", "exercise": "Standing Tricep Extension", "weight": 35.0, "reps": 8, "volume": 280.0}, {"date": "2026-05-05", "meso_id": "M11", "meso_name": "M11 \u2013 Apr/May 2026", "week": "3", "muscle": "Triceps", "exercise": "Seated Dip Machine", "weight": 70.0, "reps": 7, "volume": 490.0}, {"date": "2026-05-05", "meso_id": "M11", "meso_name": "M11 \u2013 Apr/May 2026", "week": "3", "muscle": "Triceps", "exercise": "Seated Dip Machine", "weight": 70.0, "reps": 7, "volume": 490.0}, {"date": "2026-05-05", "meso_id": "M11", "meso_name": "M11 \u2013 Apr/May 2026", "week": "3", "muscle": "Triceps", "exercise": "Seated Dip Machine", "weight": 70.0, "reps": 7, "volume": 490.0}, {"date": "2026-05-05", "meso_id": "M11", "meso_name": "M11 \u2013 Apr/May 2026", "week": "3", "muscle": "Triceps", "exercise": "Seated Triceps Pushdown", "weight": 30.0, "reps": 8, "volume": 240.0}, {"date": "2026-05-05", "meso_id": "M11", "meso_name": "M11 \u2013 Apr/May 2026", "week": "3", "muscle": "Triceps", "exercise": "Seated Triceps Pushdown", "weight": 30.0, "reps": 8, "volume": 240.0}, {"date": "2026-05-05", "meso_id": "M11", "meso_name": "M11 \u2013 Apr/May 2026", "week": "3", "muscle": "Triceps", "exercise": "Seated Triceps Pushdown", "weight": 30.0, "reps": 8, "volume": 240.0}, {"date": "2026-05-05", "meso_id": "M11", "meso_name": "M11 \u2013 Apr/May 2026", "week": "3", "muscle": "Forearms", "exercise": "Bent Over Grip Strength", "weight": 37.5, "reps": 7, "volume": 262.5}, {"date": "2026-05-05", "meso_id": "M11", "meso_name": "M11 \u2013 Apr/May 2026", "week": "3", "muscle": "Forearms", "exercise": "Bent Over Grip Strength", "weight": 37.5, "reps": 7, "volume": 262.5}, {"date": "2026-05-05", "meso_id": "M11", "meso_name": "M11 \u2013 Apr/May 2026", "week": "3", "muscle": "Forearms", "exercise": "Bent Over Grip Strength", "weight": 37.5, "reps": 7, "volume": 262.5}, {"date": "2026-05-05", "meso_id": "M11", "meso_name": "M11 \u2013 Apr/May 2026", "week": "3", "muscle": "Glutes", "exercise": "Reverse Glute Pendulum Machine", "weight": 60.0, "reps": 8, "volume": 480.0}, {"date": "2026-05-05", "meso_id": "M11", "meso_name": "M11 \u2013 Apr/May 2026", "week": "3", "muscle": "Glutes", "exercise": "Reverse Glute Pendulum Machine", "weight": 60.0, "reps": 8, "volume": 480.0}, {"date": "2026-05-05", "meso_id": "M11", "meso_name": "M11 \u2013 Apr/May 2026", "week": "3", "muscle": "Core", "exercise": "Cable Crunch", "weight": 60.0, "reps": 8, "volume": 480.0}, {"date": "2026-05-05", "meso_id": "M11", "meso_name": "M11 \u2013 Apr/May 2026", "week": "3", "muscle": "Core", "exercise": "Cable Crunch", "weight": 60.0, "reps": 8, "volume": 480.0}, {"date": "2026-05-05", "meso_id": "M11", "meso_name": "M11 \u2013 Apr/May 2026", "week": "3", "muscle": "Back", "exercise": "Reverse Hyper Extension", "weight": 15.0, "reps": 7, "volume": 105.0}, {"date": "2026-05-05", "meso_id": "M11", "meso_name": "M11 \u2013 Apr/May 2026", "week": "3", "muscle": "Back", "exercise": "Reverse Hyper Extension", "weight": 15.0, "reps": 7, "volume": 105.0}, {"date": "2026-05-05", "meso_id": "M11", "meso_name": "M11 \u2013 Apr/May 2026", "week": "3", "muscle": "Shoulders", "exercise": "Plate Loaded Lat Raises", "weight": 7.5, "reps": 6, "volume": 45.0}, {"date": "2026-05-05", "meso_id": "M11", "meso_name": "M11 \u2013 Apr/May 2026", "week": "3", "muscle": "Shoulders", "exercise": "Plate Loaded Lat Raises", "weight": 7.5, "reps": 6, "volume": 45.0}, {"date": "2026-05-05", "meso_id": "M11", "meso_name": "M11 \u2013 Apr/May 2026", "week": "3", "muscle": "Shoulders", "exercise": "Plate Loaded Lat Raises", "weight": 7.5, "reps": 6, "volume": 45.0}, {"date": "2026-05-06", "meso_id": "M11", "meso_name": "M11 \u2013 Apr/May 2026", "week": "3", "muscle": "Back", "exercise": "T Bar Row", "weight": 20.0, "reps": 7, "volume": 140.0}, {"date": "2026-05-06", "meso_id": "M11", "meso_name": "M11 \u2013 Apr/May 2026", "week": "3", "muscle": "Back", "exercise": "T Bar Row", "weight": 20.0, "reps": 7, "volume": 140.0}, {"date": "2026-05-06", "meso_id": "M11", "meso_name": "M11 \u2013 Apr/May 2026", "week": "3", "muscle": "Back", "exercise": "T Bar Row", "weight": 20.0, "reps": 7, "volume": 140.0}, {"date": "2026-05-06", "meso_id": "M11", "meso_name": "M11 \u2013 Apr/May 2026", "week": "3", "muscle": "Back", "exercise": "Seated Cable Row (Single Arm)", "weight": 6.0, "reps": 7, "volume": 42.0}, {"date": "2026-05-06", "meso_id": "M11", "meso_name": "M11 \u2013 Apr/May 2026", "week": "3", "muscle": "Back", "exercise": "Seated Cable Row (Single Arm)", "weight": 6.0, "reps": 7, "volume": 42.0}, {"date": "2026-05-06", "meso_id": "M11", "meso_name": "M11 \u2013 Apr/May 2026", "week": "3", "muscle": "Back", "exercise": "Seated Cable Row (Single Arm)", "weight": 6.0, "reps": 7, "volume": 42.0}, {"date": "2026-05-06", "meso_id": "M11", "meso_name": "M11 \u2013 Apr/May 2026", "week": "3", "muscle": "Chest", "exercise": "Incline Dumbbell Press", "weight": 20.0, "reps": 7, "volume": 140.0}, {"date": "2026-05-06", "meso_id": "M11", "meso_name": "M11 \u2013 Apr/May 2026", "week": "3", "muscle": "Chest", "exercise": "Incline Dumbbell Press", "weight": 20.0, "reps": 7, "volume": 140.0}, {"date": "2026-05-06", "meso_id": "M11", "meso_name": "M11 \u2013 Apr/May 2026", "week": "3", "muscle": "Chest", "exercise": "Incline Dumbbell Press", "weight": 20.0, "reps": 7, "volume": 140.0}, {"date": "2026-05-06", "meso_id": "M11", "meso_name": "M11 \u2013 Apr/May 2026", "week": "3", "muscle": "Hamstrings", "exercise": "Lying Leg Curl", "weight": 20.0, "reps": 7, "volume": 140.0}, {"date": "2026-05-06", "meso_id": "M11", "meso_name": "M11 \u2013 Apr/May 2026", "week": "3", "muscle": "Hamstrings", "exercise": "Lying Leg Curl", "weight": 20.0, "reps": 7, "volume": 140.0}, {"date": "2026-05-06", "meso_id": "M11", "meso_name": "M11 \u2013 Apr/May 2026", "week": "3", "muscle": "Core", "exercise": "Crunch Machine Upstairs", "weight": 22.5, "reps": 7, "volume": 157.5}, {"date": "2026-05-06", "meso_id": "M11", "meso_name": "M11 \u2013 Apr/May 2026", "week": "3", "muscle": "Core", "exercise": "Crunch Machine Upstairs", "weight": 22.5, "reps": 7, "volume": 157.5}, {"date": "2026-05-06", "meso_id": "M11", "meso_name": "M11 \u2013 Apr/May 2026", "week": "3", "muscle": "Shoulders", "exercise": "Dumbbell Front Raise", "weight": 6.0, "reps": 9, "volume": 54.0}, {"date": "2026-05-06", "meso_id": "M11", "meso_name": "M11 \u2013 Apr/May 2026", "week": "3", "muscle": "Shoulders", "exercise": "Dumbbell Front Raise", "weight": 6.0, "reps": 9, "volume": 54.0}, {"date": "2026-05-06", "meso_id": "M11", "meso_name": "M11 \u2013 Apr/May 2026", "week": "3", "muscle": "Shoulders", "exercise": "Smith Machine Upright Row", "weight": 10.0, "reps": 9, "volume": 90.0}, {"date": "2026-05-06", "meso_id": "M11", "meso_name": "M11 \u2013 Apr/May 2026", "week": "3", "muscle": "Shoulders", "exercise": "Smith Machine Upright Row", "weight": 10.0, "reps": 9, "volume": 90.0}, {"date": "2026-05-06", "meso_id": "M11", "meso_name": "M11 \u2013 Apr/May 2026", "week": "3", "muscle": "Back", "exercise": "Watson Dual Stack Pulldown", "weight": 7.0, "reps": 7, "volume": 49.0}, {"date": "2026-05-06", "meso_id": "M11", "meso_name": "M11 \u2013 Apr/May 2026", "week": "3", "muscle": "Back", "exercise": "Watson Dual Stack Pulldown", "weight": 7.0, "reps": 7, "volume": 49.0}, {"date": "2026-05-06", "meso_id": "M11", "meso_name": "M11 \u2013 Apr/May 2026", "week": "3", "muscle": "Back", "exercise": "Watson Dual Stack Pulldown", "weight": 7.0, "reps": 7, "volume": 49.0}, {"date": "2026-05-07", "meso_id": "M11", "meso_name": "M11 \u2013 Apr/May 2026", "week": "3", "muscle": "Shoulders", "exercise": "Seated Rear Delt Shoulder", "weight": 50.0, "reps": 7, "volume": 350.0}, {"date": "2026-05-07", "meso_id": "M11", "meso_name": "M11 \u2013 Apr/May 2026", "week": "3", "muscle": "Shoulders", "exercise": "Seated Rear Delt Shoulder", "weight": 50.0, "reps": 7, "volume": 350.0}, {"date": "2026-05-07", "meso_id": "M11", "meso_name": "M11 \u2013 Apr/May 2026", "week": "3", "muscle": "Shoulders", "exercise": "Seated Rear Delt Shoulder", "weight": 50.0, "reps": 7, "volume": 350.0}, {"date": "2026-05-07", "meso_id": "M11", "meso_name": "M11 \u2013 Apr/May 2026", "week": "3", "muscle": "Shoulders", "exercise": "Machine Shoulder Press", "weight": 40.0, "reps": 8, "volume": 320.0}, {"date": "2026-05-07", "meso_id": "M11", "meso_name": "M11 \u2013 Apr/May 2026", "week": "3", "muscle": "Shoulders", "exercise": "Machine Shoulder Press", "weight": 40.0, "reps": 8, "volume": 320.0}, {"date": "2026-05-07", "meso_id": "M11", "meso_name": "M11 \u2013 Apr/May 2026", "week": "3", "muscle": "Shoulders", "exercise": "Machine Shoulder Press", "weight": 40.0, "reps": 8, "volume": 320.0}, {"date": "2026-05-07", "meso_id": "M11", "meso_name": "M11 \u2013 Apr/May 2026", "week": "3", "muscle": "Shoulders", "exercise": "Cable Lateral Raise (Single Arm)", "weight": 3.0, "reps": 10, "volume": 30.0}, {"date": "2026-05-07", "meso_id": "M11", "meso_name": "M11 \u2013 Apr/May 2026", "week": "3", "muscle": "Shoulders", "exercise": "Cable Lateral Raise (Single Arm)", "weight": 3.0, "reps": 10, "volume": 30.0}, {"date": "2026-05-07", "meso_id": "M11", "meso_name": "M11 \u2013 Apr/May 2026", "week": "3", "muscle": "Shoulders", "exercise": "Cable Lateral Raise (Single Arm)", "weight": 3.0, "reps": 10, "volume": 30.0}, {"date": "2026-05-07", "meso_id": "M11", "meso_name": "M11 \u2013 Apr/May 2026", "week": "3", "muscle": "Forearms", "exercise": "Bent Over Grip Strength", "weight": 37.5, "reps": 7, "volume": 262.5}, {"date": "2026-05-07", "meso_id": "M11", "meso_name": "M11 \u2013 Apr/May 2026", "week": "3", "muscle": "Forearms", "exercise": "Bent Over Grip Strength", "weight": 37.5, "reps": 7, "volume": 262.5}, {"date": "2026-05-07", "meso_id": "M11", "meso_name": "M11 \u2013 Apr/May 2026", "week": "3", "muscle": "Forearms", "exercise": "Bent Over Grip Strength", "weight": 37.5, "reps": 7, "volume": 262.5}, {"date": "2026-05-07", "meso_id": "M11", "meso_name": "M11 \u2013 Apr/May 2026", "week": "3", "muscle": "Quads", "exercise": "Leg Press", "weight": 55.0, "reps": 8, "volume": 440.0}, {"date": "2026-05-07", "meso_id": "M11", "meso_name": "M11 \u2013 Apr/May 2026", "week": "3", "muscle": "Quads", "exercise": "Leg Press", "weight": 55.0, "reps": 8, "volume": 440.0}, {"date": "2026-05-07", "meso_id": "M11", "meso_name": "M11 \u2013 Apr/May 2026", "week": "3", "muscle": "Core", "exercise": "Cable Crunch", "weight": 60.0, "reps": 8, "volume": 480.0}, {"date": "2026-05-07", "meso_id": "M11", "meso_name": "M11 \u2013 Apr/May 2026", "week": "3", "muscle": "Core", "exercise": "Cable Crunch", "weight": 60.0, "reps": 8, "volume": 480.0}, {"date": "2026-05-07", "meso_id": "M11", "meso_name": "M11 \u2013 Apr/May 2026", "week": "3", "muscle": "Core", "exercise": "Cable Twist", "weight": 5.0, "reps": 11, "volume": 55.0}, {"date": "2026-05-07", "meso_id": "M11", "meso_name": "M11 \u2013 Apr/May 2026", "week": "3", "muscle": "Core", "exercise": "Cable Twist", "weight": 5.0, "reps": 11, "volume": 55.0}, {"date": "2026-05-07", "meso_id": "M11", "meso_name": "M11 \u2013 Apr/May 2026", "week": "3", "muscle": "Back", "exercise": "Seated Cable Row", "weight": 41.5, "reps": 7, "volume": 290.5}, {"date": "2026-05-07", "meso_id": "M11", "meso_name": "M11 \u2013 Apr/May 2026", "week": "3", "muscle": "Back", "exercise": "Seated Cable Row", "weight": 41.5, "reps": 7, "volume": 290.5}, {"date": "2026-05-10", "meso_id": "M11", "meso_name": "M11 \u2013 Apr/May 2026", "week": "4", "muscle": "Chest", "exercise": "Seated Chest Press", "weight": 45.0, "reps": 8, "volume": 360.0}, {"date": "2026-05-10", "meso_id": "M11", "meso_name": "M11 \u2013 Apr/May 2026", "week": "4", "muscle": "Chest", "exercise": "Seated Chest Press", "weight": 45.0, "reps": 8, "volume": 360.0}, {"date": "2026-05-10", "meso_id": "M11", "meso_name": "M11 \u2013 Apr/May 2026", "week": "4", "muscle": "Chest", "exercise": "Seated Chest Press", "weight": 45.0, "reps": 8, "volume": 360.0}, {"date": "2026-05-10", "meso_id": "M11", "meso_name": "M11 \u2013 Apr/May 2026", "week": "4", "muscle": "Chest", "exercise": "Seated Flys", "weight": 3.75, "reps": 8, "volume": 30.0}, {"date": "2026-05-10", "meso_id": "M11", "meso_name": "M11 \u2013 Apr/May 2026", "week": "4", "muscle": "Chest", "exercise": "Seated Flys", "weight": 3.75, "reps": 8, "volume": 30.0}, {"date": "2026-05-10", "meso_id": "M11", "meso_name": "M11 \u2013 Apr/May 2026", "week": "4", "muscle": "Chest", "exercise": "Seated Flys", "weight": 3.75, "reps": 8, "volume": 30.0}, {"date": "2026-05-10", "meso_id": "M11", "meso_name": "M11 \u2013 Apr/May 2026", "week": "4", "muscle": "Chest", "exercise": "Decline Chest Press", "weight": 75.0, "reps": 8, "volume": 600.0}, {"date": "2026-05-10", "meso_id": "M11", "meso_name": "M11 \u2013 Apr/May 2026", "week": "4", "muscle": "Chest", "exercise": "Decline Chest Press", "weight": 75.0, "reps": 8, "volume": 600.0}, {"date": "2026-05-10", "meso_id": "M11", "meso_name": "M11 \u2013 Apr/May 2026", "week": "4", "muscle": "Chest", "exercise": "Decline Chest Press", "weight": 75.0, "reps": 8, "volume": 600.0}, {"date": "2026-05-10", "meso_id": "M11", "meso_name": "M11 \u2013 Apr/May 2026", "week": "4", "muscle": "Forearms", "exercise": "Bent Over Grip Strength", "weight": 37.5, "reps": 8, "volume": 300.0}, {"date": "2026-05-10", "meso_id": "M11", "meso_name": "M11 \u2013 Apr/May 2026", "week": "4", "muscle": "Forearms", "exercise": "Bent Over Grip Strength", "weight": 37.5, "reps": 8, "volume": 300.0}, {"date": "2026-05-10", "meso_id": "M11", "meso_name": "M11 \u2013 Apr/May 2026", "week": "4", "muscle": "Forearms", "exercise": "Bent Over Grip Strength", "weight": 37.5, "reps": 8, "volume": 300.0}, {"date": "2026-05-10", "meso_id": "M11", "meso_name": "M11 \u2013 Apr/May 2026", "week": "4", "muscle": "Glutes", "exercise": "Reverse Glute Pendulum Machine", "weight": 60.0, "reps": 9, "volume": 540.0}, {"date": "2026-05-10", "meso_id": "M11", "meso_name": "M11 \u2013 Apr/May 2026", "week": "4", "muscle": "Glutes", "exercise": "Reverse Glute Pendulum Machine", "weight": 60.0, "reps": 9, "volume": 540.0}, {"date": "2026-05-10", "meso_id": "M11", "meso_name": "M11 \u2013 Apr/May 2026", "week": "4", "muscle": "Core", "exercise": "Cable Crunch", "weight": 60.0, "reps": 9, "volume": 540.0}, {"date": "2026-05-10", "meso_id": "M11", "meso_name": "M11 \u2013 Apr/May 2026", "week": "4", "muscle": "Core", "exercise": "Cable Crunch", "weight": 60.0, "reps": 9, "volume": 540.0}, {"date": "2026-05-10", "meso_id": "M11", "meso_name": "M11 \u2013 Apr/May 2026", "week": "4", "muscle": "Calves", "exercise": "Smith Machine Calves", "weight": 47.5, "reps": 9, "volume": 427.5}, {"date": "2026-05-10", "meso_id": "M11", "meso_name": "M11 \u2013 Apr/May 2026", "week": "4", "muscle": "Calves", "exercise": "Smith Machine Calves", "weight": 47.5, "reps": 9, "volume": 427.5}, {"date": "2026-05-10", "meso_id": "M11", "meso_name": "M11 \u2013 Apr/May 2026", "week": "4", "muscle": "Shoulders", "exercise": "Machine Lateral Raise", "weight": 5.0, "reps": 10, "volume": 50.0}, {"date": "2026-05-10", "meso_id": "M11", "meso_name": "M11 \u2013 Apr/May 2026", "week": "4", "muscle": "Shoulders", "exercise": "Machine Lateral Raise", "weight": 5.0, "reps": 10, "volume": 50.0}, {"date": "2026-05-10", "meso_id": "M11", "meso_name": "M11 \u2013 Apr/May 2026", "week": "4", "muscle": "Shoulders", "exercise": "Machine Lateral Raise", "weight": 5.0, "reps": 10, "volume": 50.0}, {"date": "2026-05-11", "meso_id": "M11", "meso_name": "M11 \u2013 Apr/May 2026", "week": "4", "muscle": "Biceps", "exercise": "EZ Bar Curl (Narrow Grip)", "weight": 20.0, "reps": 8, "volume": 160.0}, {"date": "2026-05-11", "meso_id": "M11", "meso_name": "M11 \u2013 Apr/May 2026", "week": "4", "muscle": "Biceps", "exercise": "EZ Bar Curl (Narrow Grip)", "weight": 20.0, "reps": 8, "volume": 160.0}, {"date": "2026-05-11", "meso_id": "M11", "meso_name": "M11 \u2013 Apr/May 2026", "week": "4", "muscle": "Biceps", "exercise": "EZ Bar Curl (Narrow Grip)", "weight": 22.5, "reps": 8, "volume": 180.0}, {"date": "2026-05-11", "meso_id": "M11", "meso_name": "M11 \u2013 Apr/May 2026", "week": "4", "muscle": "Biceps", "exercise": "Lying Biceps Dumbbell Curl", "weight": 7.5, "reps": 10, "volume": 75.0}, {"date": "2026-05-11", "meso_id": "M11", "meso_name": "M11 \u2013 Apr/May 2026", "week": "4", "muscle": "Biceps", "exercise": "Lying Biceps Dumbbell Curl", "weight": 7.5, "reps": 10, "volume": 75.0}, {"date": "2026-05-11", "meso_id": "M11", "meso_name": "M11 \u2013 Apr/May 2026", "week": "4", "muscle": "Biceps", "exercise": "Lying Biceps Dumbbell Curl", "weight": 7.5, "reps": 10, "volume": 75.0}, {"date": "2026-05-11", "meso_id": "M11", "meso_name": "M11 \u2013 Apr/May 2026", "week": "4", "muscle": "Biceps", "exercise": "Machine Preacher Curl", "weight": 22.5, "reps": 8, "volume": 180.0}, {"date": "2026-05-11", "meso_id": "M11", "meso_name": "M11 \u2013 Apr/May 2026", "week": "4", "muscle": "Biceps", "exercise": "Machine Preacher Curl", "weight": 22.5, "reps": 8, "volume": 180.0}, {"date": "2026-05-11", "meso_id": "M11", "meso_name": "M11 \u2013 Apr/May 2026", "week": "4", "muscle": "Biceps", "exercise": "Machine Preacher Curl", "weight": 22.5, "reps": 8, "volume": 180.0}, {"date": "2026-05-11", "meso_id": "M11", "meso_name": "M11 \u2013 Apr/May 2026", "week": "4", "muscle": "Shoulders", "exercise": "Cable Rope Facepull", "weight": 20.5, "reps": 9, "volume": 184.5}, {"date": "2026-05-11", "meso_id": "M11", "meso_name": "M11 \u2013 Apr/May 2026", "week": "4", "muscle": "Shoulders", "exercise": "Cable Rope Facepull", "weight": 20.5, "reps": 9, "volume": 184.5}, {"date": "2026-05-11", "meso_id": "M11", "meso_name": "M11 \u2013 Apr/May 2026", "week": "4", "muscle": "Shoulders", "exercise": "Cable Rope Facepull", "weight": 20.5, "reps": 9, "volume": 184.5}, {"date": "2026-05-11", "meso_id": "M11", "meso_name": "M11 \u2013 Apr/May 2026", "week": "4", "muscle": "Quads", "exercise": "Leg Press", "weight": 55.0, "reps": 9, "volume": 495.0}, {"date": "2026-05-11", "meso_id": "M11", "meso_name": "M11 \u2013 Apr/May 2026", "week": "4", "muscle": "Quads", "exercise": "Leg Press", "weight": 55.0, "reps": 9, "volume": 495.0}, {"date": "2026-05-11", "meso_id": "M11", "meso_name": "M11 \u2013 Apr/May 2026", "week": "4", "muscle": "Core", "exercise": "Crunch Machine Upstairs", "weight": 22.5, "reps": 10, "volume": 225.0}, {"date": "2026-05-11", "meso_id": "M11", "meso_name": "M11 \u2013 Apr/May 2026", "week": "4", "muscle": "Core", "exercise": "Crunch Machine Upstairs", "weight": 22.5, "reps": 10, "volume": 225.0}, {"date": "2026-05-11", "meso_id": "M11", "meso_name": "M11 \u2013 Apr/May 2026", "week": "4", "muscle": "Quads", "exercise": "Hip Adduction", "weight": 30.0, "reps": 9, "volume": 270.0}, {"date": "2026-05-11", "meso_id": "M11", "meso_name": "M11 \u2013 Apr/May 2026", "week": "4", "muscle": "Quads", "exercise": "Hip Adduction", "weight": 30.0, "reps": 10, "volume": 300.0}, {"date": "2026-05-11", "meso_id": "M11", "meso_name": "M11 \u2013 Apr/May 2026", "week": "4", "muscle": "Glutes", "exercise": "Hip Abduction Machine", "weight": 30.0, "reps": 9, "volume": 270.0}, {"date": "2026-05-11", "meso_id": "M11", "meso_name": "M11 \u2013 Apr/May 2026", "week": "4", "muscle": "Glutes", "exercise": "Hip Abduction Machine", "weight": 30.0, "reps": 10, "volume": 300.0}, {"date": "2026-05-12", "meso_id": "M11", "meso_name": "M11 \u2013 Apr/May 2026", "week": "4", "muscle": "Triceps", "exercise": "Standing Tricep Extension", "weight": 35.0, "reps": 9, "volume": 315.0}, {"date": "2026-05-12", "meso_id": "M11", "meso_name": "M11 \u2013 Apr/May 2026", "week": "4", "muscle": "Triceps", "exercise": "Standing Tricep Extension", "weight": 35.0, "reps": 9, "volume": 315.0}, {"date": "2026-05-12", "meso_id": "M11", "meso_name": "M11 \u2013 Apr/May 2026", "week": "4", "muscle": "Triceps", "exercise": "Standing Tricep Extension", "weight": 35.0, "reps": 9, "volume": 315.0}, {"date": "2026-05-12", "meso_id": "M11", "meso_name": "M11 \u2013 Apr/May 2026", "week": "4", "muscle": "Triceps", "exercise": "Seated Dip Machine", "weight": 67.5, "reps": 8, "volume": 540.0}, {"date": "2026-05-12", "meso_id": "M11", "meso_name": "M11 \u2013 Apr/May 2026", "week": "4", "muscle": "Triceps", "exercise": "Seated Dip Machine", "weight": 67.5, "reps": 8, "volume": 540.0}, {"date": "2026-05-12", "meso_id": "M11", "meso_name": "M11 \u2013 Apr/May 2026", "week": "4", "muscle": "Triceps", "exercise": "Seated Dip Machine", "weight": 67.5, "reps": 8, "volume": 540.0}, {"date": "2026-05-12", "meso_id": "M11", "meso_name": "M11 \u2013 Apr/May 2026", "week": "4", "muscle": "Triceps", "exercise": "Seated Triceps Pushdown", "weight": 30.0, "reps": 9, "volume": 270.0}, {"date": "2026-05-12", "meso_id": "M11", "meso_name": "M11 \u2013 Apr/May 2026", "week": "4", "muscle": "Triceps", "exercise": "Seated Triceps Pushdown", "weight": 30.0, "reps": 9, "volume": 270.0}, {"date": "2026-05-12", "meso_id": "M11", "meso_name": "M11 \u2013 Apr/May 2026", "week": "4", "muscle": "Triceps", "exercise": "Seated Triceps Pushdown", "weight": 30.0, "reps": 9, "volume": 270.0}, {"date": "2026-05-12", "meso_id": "M11", "meso_name": "M11 \u2013 Apr/May 2026", "week": "4", "muscle": "Forearms", "exercise": "Bent Over Grip Strength", "weight": 37.5, "reps": 9, "volume": 337.5}, {"date": "2026-05-12", "meso_id": "M11", "meso_name": "M11 \u2013 Apr/May 2026", "week": "4", "muscle": "Forearms", "exercise": "Bent Over Grip Strength", "weight": 37.5, "reps": 9, "volume": 337.5}, {"date": "2026-05-12", "meso_id": "M11", "meso_name": "M11 \u2013 Apr/May 2026", "week": "4", "muscle": "Forearms", "exercise": "Bent Over Grip Strength", "weight": 37.5, "reps": 9, "volume": 337.5}, {"date": "2026-05-12", "meso_id": "M11", "meso_name": "M11 \u2013 Apr/May 2026", "week": "4", "muscle": "Glutes", "exercise": "Reverse Glute Pendulum Machine", "weight": 60.0, "reps": 9, "volume": 540.0}, {"date": "2026-05-12", "meso_id": "M11", "meso_name": "M11 \u2013 Apr/May 2026", "week": "4", "muscle": "Glutes", "exercise": "Reverse Glute Pendulum Machine", "weight": 60.0, "reps": 9, "volume": 540.0}, {"date": "2026-05-12", "meso_id": "M11", "meso_name": "M11 \u2013 Apr/May 2026", "week": "4", "muscle": "Core", "exercise": "Cable Crunch", "weight": 60.0, "reps": 9, "volume": 540.0}, {"date": "2026-05-12", "meso_id": "M11", "meso_name": "M11 \u2013 Apr/May 2026", "week": "4", "muscle": "Core", "exercise": "Cable Crunch", "weight": 60.0, "reps": 9, "volume": 540.0}, {"date": "2026-05-12", "meso_id": "M11", "meso_name": "M11 \u2013 Apr/May 2026", "week": "4", "muscle": "Back", "exercise": "Reverse Hyper Extension", "weight": 15.0, "reps": 8, "volume": 120.0}, {"date": "2026-05-12", "meso_id": "M11", "meso_name": "M11 \u2013 Apr/May 2026", "week": "4", "muscle": "Back", "exercise": "Reverse Hyper Extension", "weight": 15.0, "reps": 8, "volume": 120.0}, {"date": "2026-05-12", "meso_id": "M11", "meso_name": "M11 \u2013 Apr/May 2026", "week": "4", "muscle": "Shoulders", "exercise": "Plate Loaded Lat Raises", "weight": 7.5, "reps": 7, "volume": 52.5}, {"date": "2026-05-12", "meso_id": "M11", "meso_name": "M11 \u2013 Apr/May 2026", "week": "4", "muscle": "Shoulders", "exercise": "Plate Loaded Lat Raises", "weight": 7.5, "reps": 7, "volume": 52.5}, {"date": "2026-05-12", "meso_id": "M11", "meso_name": "M11 \u2013 Apr/May 2026", "week": "4", "muscle": "Shoulders", "exercise": "Plate Loaded Lat Raises", "weight": 7.5, "reps": 7, "volume": 52.5}, {"date": "2026-05-13", "meso_id": "M11", "meso_name": "M11 \u2013 Apr/May 2026", "week": "4", "muscle": "Back", "exercise": "T Bar Row", "weight": 20.0, "reps": 8, "volume": 160.0}, {"date": "2026-05-13", "meso_id": "M11", "meso_name": "M11 \u2013 Apr/May 2026", "week": "4", "muscle": "Back", "exercise": "T Bar Row", "weight": 20.0, "reps": 8, "volume": 160.0}, {"date": "2026-05-13", "meso_id": "M11", "meso_name": "M11 \u2013 Apr/May 2026", "week": "4", "muscle": "Back", "exercise": "T Bar Row", "weight": 20.0, "reps": 8, "volume": 160.0}, {"date": "2026-05-13", "meso_id": "M11", "meso_name": "M11 \u2013 Apr/May 2026", "week": "4", "muscle": "Back", "exercise": "Seated Cable Row (Single Arm)", "weight": 6.0, "reps": 8, "volume": 48.0}, {"date": "2026-05-13", "meso_id": "M11", "meso_name": "M11 \u2013 Apr/May 2026", "week": "4", "muscle": "Back", "exercise": "Seated Cable Row (Single Arm)", "weight": 6.0, "reps": 8, "volume": 48.0}, {"date": "2026-05-13", "meso_id": "M11", "meso_name": "M11 \u2013 Apr/May 2026", "week": "4", "muscle": "Back", "exercise": "Seated Cable Row (Single Arm)", "weight": 6.0, "reps": 8, "volume": 48.0}, {"date": "2026-05-13", "meso_id": "M11", "meso_name": "M11 \u2013 Apr/May 2026", "week": "4", "muscle": "Chest", "exercise": "Incline Dumbbell Press", "weight": 20.0, "reps": 8, "volume": 160.0}, {"date": "2026-05-13", "meso_id": "M11", "meso_name": "M11 \u2013 Apr/May 2026", "week": "4", "muscle": "Chest", "exercise": "Incline Dumbbell Press", "weight": 20.0, "reps": 8, "volume": 160.0}, {"date": "2026-05-13", "meso_id": "M11", "meso_name": "M11 \u2013 Apr/May 2026", "week": "4", "muscle": "Chest", "exercise": "Incline Dumbbell Press", "weight": 20.0, "reps": 8, "volume": 160.0}, {"date": "2026-05-13", "meso_id": "M11", "meso_name": "M11 \u2013 Apr/May 2026", "week": "4", "muscle": "Hamstrings", "exercise": "Lying Leg Curl", "weight": 20.0, "reps": 8, "volume": 160.0}, {"date": "2026-05-13", "meso_id": "M11", "meso_name": "M11 \u2013 Apr/May 2026", "week": "4", "muscle": "Hamstrings", "exercise": "Lying Leg Curl", "weight": 20.0, "reps": 8, "volume": 160.0}, {"date": "2026-05-13", "meso_id": "M11", "meso_name": "M11 \u2013 Apr/May 2026", "week": "4", "muscle": "Core", "exercise": "Crunch Machine Upstairs", "weight": 22.5, "reps": 10, "volume": 225.0}, {"date": "2026-05-13", "meso_id": "M11", "meso_name": "M11 \u2013 Apr/May 2026", "week": "4", "muscle": "Core", "exercise": "Crunch Machine Upstairs", "weight": 22.5, "reps": 10, "volume": 225.0}, {"date": "2026-05-13", "meso_id": "M11", "meso_name": "M11 \u2013 Apr/May 2026", "week": "4", "muscle": "Shoulders", "exercise": "Dumbbell Front Raise", "weight": 6.0, "reps": 10, "volume": 60.0}, {"date": "2026-05-13", "meso_id": "M11", "meso_name": "M11 \u2013 Apr/May 2026", "week": "4", "muscle": "Shoulders", "exercise": "Dumbbell Front Raise", "weight": 6.0, "reps": 10, "volume": 60.0}, {"date": "2026-05-13", "meso_id": "M11", "meso_name": "M11 \u2013 Apr/May 2026", "week": "4", "muscle": "Shoulders", "exercise": "Smith Machine Upright Row", "weight": 10.0, "reps": 10, "volume": 100.0}, {"date": "2026-05-13", "meso_id": "M11", "meso_name": "M11 \u2013 Apr/May 2026", "week": "4", "muscle": "Shoulders", "exercise": "Smith Machine Upright Row", "weight": 10.0, "reps": 10, "volume": 100.0}, {"date": "2026-05-13", "meso_id": "M11", "meso_name": "M11 \u2013 Apr/May 2026", "week": "4", "muscle": "Back", "exercise": "Watson Dual Stack Pulldown", "weight": 7.0, "reps": 8, "volume": 56.0}, {"date": "2026-05-13", "meso_id": "M11", "meso_name": "M11 \u2013 Apr/May 2026", "week": "4", "muscle": "Back", "exercise": "Watson Dual Stack Pulldown", "weight": 7.0, "reps": 8, "volume": 56.0}, {"date": "2026-05-13", "meso_id": "M11", "meso_name": "M11 \u2013 Apr/May 2026", "week": "4", "muscle": "Back", "exercise": "Watson Dual Stack Pulldown", "weight": 7.0, "reps": 8, "volume": 56.0}, {"date": "2026-05-14", "meso_id": "M11", "meso_name": "M11 \u2013 Apr/May 2026", "week": "4", "muscle": "Shoulders", "exercise": "Seated Rear Delt Shoulder", "weight": 50.0, "reps": 8, "volume": 400.0}, {"date": "2026-05-14", "meso_id": "M11", "meso_name": "M11 \u2013 Apr/May 2026", "week": "4", "muscle": "Shoulders", "exercise": "Seated Rear Delt Shoulder", "weight": 50.0, "reps": 8, "volume": 400.0}, {"date": "2026-05-14", "meso_id": "M11", "meso_name": "M11 \u2013 Apr/May 2026", "week": "4", "muscle": "Shoulders", "exercise": "Seated Rear Delt Shoulder", "weight": 50.0, "reps": 8, "volume": 400.0}, {"date": "2026-05-14", "meso_id": "M11", "meso_name": "M11 \u2013 Apr/May 2026", "week": "4", "muscle": "Shoulders", "exercise": "Machine Shoulder Press", "weight": 40.0, "reps": 9, "volume": 360.0}, {"date": "2026-05-14", "meso_id": "M11", "meso_name": "M11 \u2013 Apr/May 2026", "week": "4", "muscle": "Shoulders", "exercise": "Machine Shoulder Press", "weight": 40.0, "reps": 9, "volume": 360.0}, {"date": "2026-05-14", "meso_id": "M11", "meso_name": "M11 \u2013 Apr/May 2026", "week": "4", "muscle": "Shoulders", "exercise": "Machine Shoulder Press", "weight": 40.0, "reps": 9, "volume": 360.0}, {"date": "2026-05-14", "meso_id": "M11", "meso_name": "M11 \u2013 Apr/May 2026", "week": "4", "muscle": "Shoulders", "exercise": "Cable Lateral Raise (Single Arm)", "weight": 3.0, "reps": 11, "volume": 33.0}, {"date": "2026-05-14", "meso_id": "M11", "meso_name": "M11 \u2013 Apr/May 2026", "week": "4", "muscle": "Shoulders", "exercise": "Cable Lateral Raise (Single Arm)", "weight": 3.0, "reps": 11, "volume": 33.0}, {"date": "2026-05-14", "meso_id": "M11", "meso_name": "M11 \u2013 Apr/May 2026", "week": "4", "muscle": "Shoulders", "exercise": "Cable Lateral Raise (Single Arm)", "weight": 3.0, "reps": 11, "volume": 33.0}, {"date": "2026-05-14", "meso_id": "M11", "meso_name": "M11 \u2013 Apr/May 2026", "week": "4", "muscle": "Forearms", "exercise": "Bent Over Grip Strength", "weight": 37.5, "reps": 8, "volume": 300.0}, {"date": "2026-05-14", "meso_id": "M11", "meso_name": "M11 \u2013 Apr/May 2026", "week": "4", "muscle": "Forearms", "exercise": "Bent Over Grip Strength", "weight": 37.5, "reps": 8, "volume": 300.0}, {"date": "2026-05-14", "meso_id": "M11", "meso_name": "M11 \u2013 Apr/May 2026", "week": "4", "muscle": "Forearms", "exercise": "Bent Over Grip Strength", "weight": 37.5, "reps": 8, "volume": 300.0}, {"date": "2026-05-14", "meso_id": "M11", "meso_name": "M11 \u2013 Apr/May 2026", "week": "4", "muscle": "Quads", "exercise": "Leg Press", "weight": 55.0, "reps": 9, "volume": 495.0}, {"date": "2026-05-14", "meso_id": "M11", "meso_name": "M11 \u2013 Apr/May 2026", "week": "4", "muscle": "Quads", "exercise": "Leg Press", "weight": 55.0, "reps": 9, "volume": 495.0}, {"date": "2026-05-14", "meso_id": "M11", "meso_name": "M11 \u2013 Apr/May 2026", "week": "4", "muscle": "Core", "exercise": "Cable Crunch", "weight": 60.0, "reps": 9, "volume": 540.0}, {"date": "2026-05-14", "meso_id": "M11", "meso_name": "M11 \u2013 Apr/May 2026", "week": "4", "muscle": "Core", "exercise": "Cable Crunch", "weight": 60.0, "reps": 9, "volume": 540.0}, {"date": "2026-05-14", "meso_id": "M11", "meso_name": "M11 \u2013 Apr/May 2026", "week": "4", "muscle": "Core", "exercise": "Cable Twist", "weight": 5.0, "reps": 12, "volume": 60.0}, {"date": "2026-05-14", "meso_id": "M11", "meso_name": "M11 \u2013 Apr/May 2026", "week": "4", "muscle": "Core", "exercise": "Cable Twist", "weight": 5.0, "reps": 12, "volume": 60.0}, {"date": "2026-05-14", "meso_id": "M11", "meso_name": "M11 \u2013 Apr/May 2026", "week": "4", "muscle": "Back", "exercise": "Seated Cable Row", "weight": 41.0, "reps": 6, "volume": 246.0}, {"date": "2026-05-14", "meso_id": "M11", "meso_name": "M11 \u2013 Apr/May 2026", "week": "4", "muscle": "Back", "exercise": "Seated Cable Row", "weight": 41.0, "reps": 6, "volume": 246.0}, {"date": "2026-05-17", "meso_id": "M11", "meso_name": "M11 \u2013 Apr/May 2026", "week": "5", "muscle": "Chest", "exercise": "Seated Chest Press", "weight": 25.0, "reps": 5, "volume": 125.0}, {"date": "2026-05-17", "meso_id": "M11", "meso_name": "M11 \u2013 Apr/May 2026", "week": "5", "muscle": "Chest", "exercise": "Seated Flys", "weight": 3.75, "reps": 5, "volume": 18.8}, {"date": "2026-05-17", "meso_id": "M11", "meso_name": "M11 \u2013 Apr/May 2026", "week": "5", "muscle": "Chest", "exercise": "Decline Chest Press", "weight": 40.0, "reps": 5, "volume": 200.0}, {"date": "2026-05-17", "meso_id": "M11", "meso_name": "M11 \u2013 Apr/May 2026", "week": "5", "muscle": "Forearms", "exercise": "Bent Over Grip Strength", "weight": 27.5, "reps": 5, "volume": 137.5}, {"date": "2026-05-17", "meso_id": "M11", "meso_name": "M11 \u2013 Apr/May 2026", "week": "5", "muscle": "Glutes", "exercise": "Reverse Glute Pendulum Machine", "weight": 40.0, "reps": 6, "volume": 240.0}, {"date": "2026-05-17", "meso_id": "M11", "meso_name": "M11 \u2013 Apr/May 2026", "week": "5", "muscle": "Core", "exercise": "Cable Crunch", "weight": 40.0, "reps": 6, "volume": 240.0}, {"date": "2026-05-17", "meso_id": "M11", "meso_name": "M11 \u2013 Apr/May 2026", "week": "5", "muscle": "Calves", "exercise": "Smith Machine Calves", "weight": 37.5, "reps": 6, "volume": 225.0}, {"date": "2026-05-17", "meso_id": "M11", "meso_name": "M11 \u2013 Apr/May 2026", "week": "5", "muscle": "Shoulders", "exercise": "Machine Lateral Raise", "weight": 2.5, "reps": 7, "volume": 17.5}, {"date": "2026-05-18", "meso_id": "M11", "meso_name": "M11 \u2013 Apr/May 2026", "week": "5", "muscle": "Biceps", "exercise": "EZ Bar Curl (Narrow Grip)", "weight": 15.0, "reps": 5, "volume": 75.0}, {"date": "2026-05-18", "meso_id": "M11", "meso_name": "M11 \u2013 Apr/May 2026", "week": "5", "muscle": "Biceps", "exercise": "Lying Biceps Dumbbell Curl", "weight": 5.0, "reps": 7, "volume": 35.0}, {"date": "2026-05-18", "meso_id": "M11", "meso_name": "M11 \u2013 Apr/May 2026", "week": "5", "muscle": "Biceps", "exercise": "Machine Preacher Curl", "weight": 17.5, "reps": 5, "volume": 87.5}, {"date": "2026-05-18", "meso_id": "M11", "meso_name": "M11 \u2013 Apr/May 2026", "week": "5", "muscle": "Shoulders", "exercise": "Cable Rope Facepull", "weight": 18.0, "reps": 5, "volume": 90.0}, {"date": "2026-05-18", "meso_id": "M11", "meso_name": "M11 \u2013 Apr/May 2026", "week": "5", "muscle": "Quads", "exercise": "Leg Press", "weight": 45.0, "reps": 5, "volume": 225.0}, {"date": "2026-05-18", "meso_id": "M11", "meso_name": "M11 \u2013 Apr/May 2026", "week": "5", "muscle": "Core", "exercise": "Crunch Machine Upstairs", "weight": 17.5, "reps": 6, "volume": 105.0}, {"date": "2026-05-18", "meso_id": "M11", "meso_name": "M11 \u2013 Apr/May 2026", "week": "5", "muscle": "Quads", "exercise": "Hip Adduction", "weight": 23.0, "reps": 6, "volume": 138.0}, {"date": "2026-05-18", "meso_id": "M11", "meso_name": "M11 \u2013 Apr/May 2026", "week": "5", "muscle": "Glutes", "exercise": "Hip Abduction Machine", "weight": 23.0, "reps": 6, "volume": 138.0}, {"date": "2026-05-19", "meso_id": "M11", "meso_name": "M11 \u2013 Apr/May 2026", "week": "5", "muscle": "Triceps", "exercise": "Standing Tricep Extension", "weight": 25.0, "reps": 6, "volume": 150.0}, {"date": "2026-05-19", "meso_id": "M11", "meso_name": "M11 \u2013 Apr/May 2026", "week": "5", "muscle": "Triceps", "exercise": "Seated Dip Machine", "weight": 50.0, "reps": 6, "volume": 300.0}, {"date": "2026-05-19", "meso_id": "M11", "meso_name": "M11 \u2013 Apr/May 2026", "week": "5", "muscle": "Triceps", "exercise": "Seated Triceps Pushdown", "weight": 20.0, "reps": 6, "volume": 120.0}, {"date": "2026-05-19", "meso_id": "M11", "meso_name": "M11 \u2013 Apr/May 2026", "week": "5", "muscle": "Forearms", "exercise": "Bent Over Grip Strength", "weight": 27.5, "reps": 5, "volume": 137.5}, {"date": "2026-05-19", "meso_id": "M11", "meso_name": "M11 \u2013 Apr/May 2026", "week": "5", "muscle": "Glutes", "exercise": "Reverse Glute Pendulum Machine", "weight": 40.0, "reps": 6, "volume": 240.0}, {"date": "2026-05-19", "meso_id": "M11", "meso_name": "M11 \u2013 Apr/May 2026", "week": "5", "muscle": "Core", "exercise": "Cable Crunch", "weight": 40.0, "reps": 6, "volume": 240.0}, {"date": "2026-05-19", "meso_id": "M11", "meso_name": "M11 \u2013 Apr/May 2026", "week": "5", "muscle": "Back", "exercise": "Reverse Hyper Extension", "weight": 10.0, "reps": 5, "volume": 50.0}, {"date": "2026-05-19", "meso_id": "M11", "meso_name": "M11 \u2013 Apr/May 2026", "week": "5", "muscle": "Shoulders", "exercise": "Plate Loaded Lat Raises", "weight": 5.0, "reps": 4, "volume": 20.0}, {"date": "2026-05-20", "meso_id": "M11", "meso_name": "M11 \u2013 Apr/May 2026", "week": "5", "muscle": "Back", "exercise": "T Bar Row", "weight": 15.0, "reps": 5, "volume": 75.0}, {"date": "2026-05-20", "meso_id": "M11", "meso_name": "M11 \u2013 Apr/May 2026", "week": "5", "muscle": "Back", "exercise": "Seated Cable Row (Single Arm)", "weight": 5.0, "reps": 5, "volume": 25.0}, {"date": "2026-05-20", "meso_id": "M11", "meso_name": "M11 \u2013 Apr/May 2026", "week": "5", "muscle": "Chest", "exercise": "Incline Dumbbell Press", "weight": 15.0, "reps": 5, "volume": 75.0}, {"date": "2026-05-20", "meso_id": "M11", "meso_name": "M11 \u2013 Apr/May 2026", "week": "5", "muscle": "Hamstrings", "exercise": "Lying Leg Curl", "weight": 10.0, "reps": 4, "volume": 40.0}, {"date": "2026-05-20", "meso_id": "M11", "meso_name": "M11 \u2013 Apr/May 2026", "week": "5", "muscle": "Core", "exercise": "Crunch Machine Upstairs", "weight": 17.5, "reps": 6, "volume": 105.0}, {"date": "2026-05-20", "meso_id": "M11", "meso_name": "M11 \u2013 Apr/May 2026", "week": "5", "muscle": "Shoulders", "exercise": "Dumbbell Front Raise", "weight": 4.0, "reps": 7, "volume": 28.0}, {"date": "2026-05-20", "meso_id": "M11", "meso_name": "M11 \u2013 Apr/May 2026", "week": "5", "muscle": "Shoulders", "exercise": "Smith Machine Upright Row", "weight": 7.5, "reps": 7, "volume": 52.5}, {"date": "2026-05-20", "meso_id": "M11", "meso_name": "M11 \u2013 Apr/May 2026", "week": "5", "muscle": "Back", "exercise": "Watson Dual Stack Pulldown", "weight": 5.0, "reps": 5, "volume": 25.0}, {"date": "2026-05-21", "meso_id": "M11", "meso_name": "M11 \u2013 Apr/May 2026", "week": "5", "muscle": "Shoulders", "exercise": "Seated Rear Delt Shoulder", "weight": 40.0, "reps": 5, "volume": 200.0}, {"date": "2026-05-21", "meso_id": "M11", "meso_name": "M11 \u2013 Apr/May 2026", "week": "5", "muscle": "Shoulders", "exercise": "Machine Shoulder Press", "weight": 30.0, "reps": 6, "volume": 180.0}, {"date": "2026-05-21", "meso_id": "M11", "meso_name": "M11 \u2013 Apr/May 2026", "week": "5", "muscle": "Shoulders", "exercise": "Cable Lateral Raise (Single Arm)", "weight": 2.0, "reps": 8, "volume": 16.0}, {"date": "2026-05-21", "meso_id": "M11", "meso_name": "M11 \u2013 Apr/May 2026", "week": "5", "muscle": "Forearms", "exercise": "Bent Over Grip Strength", "weight": 27.5, "reps": 5, "volume": 137.5}, {"date": "2026-05-21", "meso_id": "M11", "meso_name": "M11 \u2013 Apr/May 2026", "week": "5", "muscle": "Quads", "exercise": "Leg Press", "weight": 45.0, "reps": 5, "volume": 225.0}, {"date": "2026-05-21", "meso_id": "M11", "meso_name": "M11 \u2013 Apr/May 2026", "week": "5", "muscle": "Core", "exercise": "Cable Crunch", "weight": 40.0, "reps": 6, "volume": 240.0}, {"date": "2026-05-21", "meso_id": "M11", "meso_name": "M11 \u2013 Apr/May 2026", "week": "5", "muscle": "Core", "exercise": "Cable Twist", "weight": 3.0, "reps": 9, "volume": 27.0}, {"date": "2026-05-21", "meso_id": "M11", "meso_name": "M11 \u2013 Apr/May 2026", "week": "5", "muscle": "Back", "exercise": "Seated Cable Row", "weight": 28.0, "reps": 6, "volume": 168.0}]};
+
+const MUSCLE_COLORS = {
+  Chest:'#fc7c8e', Back:'#7c8efc', Shoulders:'#fcd07c', Biceps:'#7cfcd0',
+  Triceps:'#d07cfc', Core:'#fc9c7c', Quads:'#7ccefc', Glutes:'#fc7cce',
+  Forearms:'#cefc7c', Calves:'#fce07c', Hamstrings:'#9cfc7c'
+};
+
+const DELOAD_DATES = new Set(['2026-05-17','2026-05-18','2026-05-19','2026-05-20','2026-05-21']);
+
+// ── UTILS ─────────────────────────────────────────────────────────────────────
+const cfg = {
+  responsive: true, maintainAspectRatio: false,
+  plugins: { legend: { labels: { color: '#6b6b80', font: { family: 'DM Mono', size: 10 }, boxWidth: 10 } } },
+  scales: {
+    x: { ticks: { color: '#6b6b80', font: { family: 'DM Mono', size: 10 } }, grid: { color: '#2a2a38' } },
+    y: { ticks: { color: '#6b6b80', font: { family: 'DM Mono', size: 10 } }, grid: { color: '#2a2a38' } }
+  }
+};
+
+function hexAlpha(hex, a) {
+  const r = parseInt(hex.slice(1,3),16), g = parseInt(hex.slice(3,5),16), b = parseInt(hex.slice(5,7),16);
+  return `rgba(${r},${g},${b},${a})`;
+}
+
+// ── INIT ──────────────────────────────────────────────────────────────────────
+const rows = RAW.rows;
+const allDates = [...new Set(rows.map(r=>r.date))].sort();
+const allExercises = [...new Set(rows.map(r=>r.exercise))].sort();
+const allMuscles = Object.keys(MUSCLE_COLORS);
+
+// Header stats
+document.getElementById('totalSets').textContent = rows.length;
+document.getElementById('totalDays').textContent = allDates.length;
+document.getElementById('totalEx').textContent = allExercises.length;
+document.getElementById('totalMeso').textContent = 2;
+
+// ── OVERVIEW ──────────────────────────────────────────────────────────────────
+
+// Sets per muscle (M11 only, excl deload)
+const m11Rows = rows.filter(r => r.meso_id === 'M11' && !DELOAD_DATES.has(r.date));
+const setsByMuscle = {};
+m11Rows.forEach(r => { setsByMuscle[r.muscle] = (setsByMuscle[r.muscle]||0) + 1; });
+const sortedMuscles = Object.entries(setsByMuscle).sort((a,b)=>b[1]-a[1]);
+
+new Chart(document.getElementById('chartMuscleSets'), {
+  type: 'bar',
+  data: {
+    labels: sortedMuscles.map(m=>m[0]),
+    datasets: [{
+      data: sortedMuscles.map(m=>m[1]),
+      backgroundColor: sortedMuscles.map(m => hexAlpha(MUSCLE_COLORS[m[0]]||'#7cfc8e', 0.8)),
+      borderColor: sortedMuscles.map(m => MUSCLE_COLORS[m[0]]||'#7cfc8e'),
+      borderWidth: 1, borderRadius: 4
+    }]
+  },
+  options: { ...cfg, plugins: { legend: { display: false } } }
+});
+
+// Daily volume M11 (excl deload)
+const m11Dates = [...new Set(m11Rows.map(r=>r.date))].sort();
+const volByDate = {};
+m11Rows.forEach(r => { volByDate[r.date] = (volByDate[r.date]||0) + r.volume; });
+
+new Chart(document.getElementById('chartDailyVol'), {
+  type: 'line',
+  data: {
+    labels: m11Dates.map(d => d.slice(5)),
+    datasets: [{
+      data: m11Dates.map(d => Math.round(volByDate[d]||0)),
+      borderColor: '#7cfc8e', backgroundColor: hexAlpha('#7cfc8e', 0.1),
+      pointBackgroundColor: '#7cfc8e', pointRadius: 3, fill: true, tension: 0.3
+    }]
+  },
+  options: { ...cfg, plugins: { legend: { display: false } } }
+});
+
+// PR list (excl deload)
+const prRows = rows.filter(r => !DELOAD_DATES.has(r.date));
+const prMap = {};
+prRows.forEach(r => {
+  if (!prMap[r.exercise] || r.weight > prMap[r.exercise].weight) {
+    prMap[r.exercise] = { weight: r.weight, date: r.date };
+  }
+});
+const prList = Object.entries(prMap).sort((a,b)=>b[1].weight - a[1].weight).slice(0,12);
+const prEl = document.getElementById('prList');
+prList.forEach(([ex, {weight, date}]) => {
+  prEl.innerHTML += `<div class="pr-row">
+    <div class="ex-name">${ex}</div>
+    <div class="pr-weight">${weight}kg</div>
+    <div class="pr-date">${date}</div>
+  </div>`;
+});
+
+// ── VOLUME PAGE ───────────────────────────────────────────────────────────────
+
+// Muscle volume over time (weekly buckets)
+const weekBuckets = {};
+rows.forEach(r => {
+  const d = new Date(r.date);
+  // Monday of the week
+  const day = d.getDay() || 7;
+  const mon = new Date(d); mon.setDate(d.getDate() - day + 1);
+  const key = mon.toISOString().slice(0,10);
+  if (!weekBuckets[key]) weekBuckets[key] = {};
+  weekBuckets[key][r.muscle] = (weekBuckets[key][r.muscle]||0) + r.volume;
+});
+const weekKeys = Object.keys(weekBuckets).sort();
+
+let activeMuscleTags = new Set(Object.keys(MUSCLE_COLORS));
+const muscleTags = document.getElementById('muscleTags');
+
+Object.keys(MUSCLE_COLORS).forEach(m => {
+  const tag = document.createElement('div');
+  tag.className = 'muscle-tag on';
+  tag.textContent = m;
+  tag.style.background = hexAlpha(MUSCLE_COLORS[m], 0.2);
+  tag.style.borderColor = MUSCLE_COLORS[m];
+  tag.style.color = MUSCLE_COLORS[m];
+  tag.onclick = () => {
+    if (activeMuscleTags.has(m)) { activeMuscleTags.delete(m); tag.classList.remove('on'); }
+    else { activeMuscleTags.add(m); tag.classList.add('on'); }
+    updateVolMuscleChart();
+  };
+  muscleTags.appendChild(tag);
+});
+
+let volMuscleChart;
+function buildVolMuscleChart() {
+  const datasets = [...activeMuscleTags].map(m => ({
+    label: m,
+    data: weekKeys.map(wk => Math.round(weekBuckets[wk]?.[m]||0)),
+    borderColor: MUSCLE_COLORS[m],
+    backgroundColor: hexAlpha(MUSCLE_COLORS[m], 0.1),
+    fill: false, tension: 0.3, pointRadius: 2
+  })).filter(ds => ds.data.some(v=>v>0));
+
+  if (volMuscleChart) volMuscleChart.destroy();
+  volMuscleChart = new Chart(document.getElementById('chartVolMuscle'), {
+    type: 'line',
+    data: { labels: weekKeys.map(d=>d.slice(5)), datasets },
+    options: { ...cfg }
+  });
+}
+function updateVolMuscleChart() { buildVolMuscleChart(); }
+buildVolMuscleChart();
+
+// Sets per session timeline
+const setsByDateAll = {};
+rows.forEach(r => { setsByDateAll[r.date] = (setsByDateAll[r.date]||0) + 1; });
+new Chart(document.getElementById('chartSetsTimeline'), {
+  type: 'bar',
+  data: {
+    labels: allDates.map(d=>d.slice(5)),
+    datasets: [{
+      data: allDates.map(d => setsByDateAll[d]||0),
+      backgroundColor: allDates.map(d => DELOAD_DATES.has(d) ? hexAlpha('#fc7c8e', 0.5) : hexAlpha('#7cfc8e', 0.7)),
+      borderRadius: 2
+    }]
+  },
+  options: { ...cfg, plugins: { legend: { display: false } } }
+});
+
+// ── PROGRESSION PAGE ──────────────────────────────────────────────────────────
+const exSelect = document.getElementById('exSelect');
+allExercises.forEach(ex => {
+  const opt = document.createElement('option');
+  opt.value = ex; opt.textContent = ex;
+  exSelect.appendChild(opt);
+});
+
+let exWeightChart, exRepChart, exVolChart;
+
+function buildExCharts() {
+  const ex = exSelect.value;
+  const exRows = rows.filter(r => r.exercise === ex && !DELOAD_DATES.has(r.date))
+    .sort((a,b) => a.date.localeCompare(b.date));
+  
+  // Best weight per date
+  const dateWeight = {}, dateReps = {}, dateVol = {}, dateCount = {};
+  exRows.forEach(r => {
+    if (!dateWeight[r.date] || r.weight > dateWeight[r.date]) dateWeight[r.date] = r.weight;
+    dateReps[r.date] = (dateReps[r.date]||0) + r.reps;
+    dateCount[r.date] = (dateCount[r.date]||0) + 1;
+    dateVol[r.date] = (dateVol[r.date]||0) + r.volume;
+  });
+  const exDates = Object.keys(dateWeight).sort();
+  if (!exDates.length) return;
+
+  const color = MUSCLE_COLORS[exRows[0]?.muscle] || '#7cfc8e';
+
+  if (exWeightChart) exWeightChart.destroy();
+  exWeightChart = new Chart(document.getElementById('chartExProgress'), {
+    type: 'line',
+    data: {
+      labels: exDates.map(d=>d.slice(5)),
+      datasets: [{
+        label: 'Peak Weight (kg)',
+        data: exDates.map(d=>dateWeight[d]),
+        borderColor: color, backgroundColor: hexAlpha(color,0.1),
+        fill: true, tension: 0.3, pointRadius: 4, pointBackgroundColor: color
+      }]
+    },
+    options: { ...cfg, plugins: { legend: { display: false } } }
+  });
+
+  if (exRepChart) exRepChart.destroy();
+  exRepChart = new Chart(document.getElementById('chartRepProgress'), {
+    type: 'bar',
+    data: {
+      labels: exDates.map(d=>d.slice(5)),
+      datasets: [{
+        label: 'Total Reps',
+        data: exDates.map(d=>dateReps[d]),
+        backgroundColor: hexAlpha(color, 0.7), borderRadius: 3
+      }]
+    },
+    options: { ...cfg, plugins: { legend: { display: false } } }
+  });
+
+  if (exVolChart) exVolChart.destroy();
+  exVolChart = new Chart(document.getElementById('chartVolProgress'), {
+    type: 'line',
+    data: {
+      labels: exDates.map(d=>d.slice(5)),
+      datasets: [{
+        label: 'Volume (kg)',
+        data: exDates.map(d=>Math.round(dateVol[d])),
+        borderColor: color, backgroundColor: hexAlpha(color,0.15),
+        fill: true, tension: 0.3, pointRadius: 3
+      }]
+    },
+    options: { ...cfg, plugins: { legend: { display: false } } }
+  });
+}
+
+exSelect.addEventListener('change', buildExCharts);
+buildExCharts();
+
+// ── HEATMAP PAGE ──────────────────────────────────────────────────────────────
+function buildHeatmap() {
+  const grid = document.getElementById('heatmapGrid');
+  
+  // Build a full year grid from Jan 2025 to May 2026
+  const start = new Date('2025-01-06'); // first Monday of Jan 2025
+  const end = new Date('2026-05-25');
+  
+  let cur = new Date(start);
+  while (cur <= end) {
+    const ds = cur.toISOString().slice(0,10);
+    const sets = setsByDateAll[ds] || 0;
+    const cell = document.createElement('div');
+    cell.className = 'hm-cell';
+    
+    let intensity = '0';
+    if (sets > 0 && sets <= 5) intensity = 'low';
+    else if (sets > 5 && sets <= 12) intensity = 'mid';
+    else if (sets > 12 && sets <= 19) intensity = 'high';
+    else if (sets >= 20) intensity = 'max';
+    
+    cell.setAttribute('data-sets', intensity);
+    cell.title = `${ds}: ${sets} sets`;
+    grid.appendChild(cell);
+    
+    cur.setDate(cur.getDate() + 1);
+  }
+}
+buildHeatmap();
+
+// Monthly sessions
+const monthSessions = {};
+allDates.forEach(d => {
+  const key = d.slice(0,7);
+  monthSessions[key] = (monthSessions[key]||0) + 1;
+});
+const months = Object.keys(monthSessions).sort();
+new Chart(document.getElementById('chartMonthly'), {
+  type: 'bar',
+  data: {
+    labels: months.map(m=>{const [y,mo]=m.split('-'); return ['','Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'][+mo]+' '+y.slice(2)}),
+    datasets: [{
+      data: months.map(m=>monthSessions[m]),
+      backgroundColor: hexAlpha('#7cfc8e', 0.7), borderRadius: 4
+    }]
+  },
+  options: { ...cfg, plugins: { legend: { display: false } } }
+});
+
+// Day of week
+const dowCount = [0,0,0,0,0,0,0];
+allDates.forEach(d => {
+  dowCount[new Date(d).getDay()]++;
+});
+new Chart(document.getElementById('chartDOW'), {
+  type: 'radar',
+  data: {
+    labels: ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'],
+    datasets: [{
+      data: dowCount,
+      borderColor: '#7cfc8e', backgroundColor: hexAlpha('#7cfc8e', 0.2),
+      pointBackgroundColor: '#7cfc8e', pointRadius: 4
+    }]
+  },
+  options: {
+    responsive: true, maintainAspectRatio: false,
+    plugins: { legend: { display: false } },
+    scales: { r: { ticks: { color: '#6b6b80', backdropColor: 'transparent', font: { family: 'DM Mono', size: 9 } }, grid: { color: '#2a2a38' }, pointLabels: { color: '#e8e8f0', font: { family: 'DM Mono', size: 10 } } } }
+  }
+});
+
+// ── NAV ───────────────────────────────────────────────────────────────────────
+function showPage(id) {
+  document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
+  document.querySelectorAll('nav button').forEach(b => b.classList.remove('active'));
+  document.getElementById('page-'+id).classList.add('active');
+  event.target.classList.add('active');
+}
+</script>
+</body>
+</html>
