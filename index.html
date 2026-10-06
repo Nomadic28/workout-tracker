@@ -195,7 +195,7 @@ function setSyncStatus(status,label){
   dot.className='sync-dot '+status;
   lbl.textContent=label;
 }
-function dataHash(){return JSON.stringify(S).length+'_'+S.mesocycles.length+'_'+Object.keys(S.workouts).length;}
+function dataHash(){return JSON.stringify({m:S.mesocycles,w:S.workouts,c:S.customExercises});}
 async function syncToSupabase(){
   setSyncStatus('ing','Saving...');
   try{
